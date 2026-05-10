@@ -83,9 +83,9 @@ class KineticsConfig:
 # ---------------------------------------------------------------------------
 
 def _extract_peak_data(
-        df: pd.DataFrame,
-        peak_id: str,
-        rxn_time: float,
+    df: pd.DataFrame,
+    peak_id: str,
+    rxn_time: float,
 ) -> tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray] | None:
     """Extract substrate concentrations, velocity, SEM, and raw area for a peak.
 
@@ -118,12 +118,12 @@ def _extract_peak_data(
 # ---------------------------------------------------------------------------
 
 def _select_and_fit(
-        peak_id: str,
-        s: np.ndarray,
-        v: np.ndarray,
-        v_sem: np.ndarray,
-        *,
-        special_peaks: dict[str, str] | None = None,
+    peak_id: str,
+    s: np.ndarray,
+    v: np.ndarray,
+    v_sem: np.ndarray,
+    *,
+    special_peaks: dict[str, str] | None = None,
 ) -> FitResult:
     special = (special_peaks or {}).get(peak_id)
     if special == "hill":
@@ -137,12 +137,12 @@ def _select_and_fit(
 
 class EnzymeKineticsAnalysis:
     def __init__(
-            self,
-            path: str | Path,
-            target_dir: str | Path,
-            *,
-            config: KineticsConfig | None = None,
-            special_peaks: dict[str, str] | None = None,
+        self,
+        path: str | Path,
+        target_dir: str | Path,
+        *,
+        config: KineticsConfig | None = None,
+        special_peaks: dict[str, str] | None = None,
     ) -> None:
         self.path = to_absolute_path(path)
         self.dest = to_absolute_path(target_dir)
@@ -165,7 +165,7 @@ class EnzymeKineticsAnalysis:
             data = _extract_peak_data(self.df, peak_id, self.config.rxn_time)
             if data is None:
                 continue
-            s, v, v_sem, _ = data          # raw area not needed at fit stage
+            s, v, v_sem, _ = data  # raw area not needed at fit stage
             try:
                 mm_fit = _select_and_fit(
                     peak_id, s, v, v_sem, special_peaks=self.special_peaks,
@@ -183,10 +183,10 @@ class EnzymeKineticsAnalysis:
         return self
 
     def apply_calibration(
-            self,
-            cal: Calibration,
-            *,
-            precise_sem: bool = True,      # FIX 4: user-selectable SEM scaling method
+        self,
+        cal: Calibration,
+        *,
+        precise_sem: bool = True,  # FIX 4: user-selectable SEM scaling method
     ) -> Self:
         """Re-fit all peaks using calibrated concentration velocities.
 
@@ -241,11 +241,13 @@ class EnzymeKineticsAnalysis:
             # FIX 4: precise vs. simplified SEM scaling
             if precise_sem:
                 # Full delta-method per data point: propagates slope_se and intercept_se
-                v_sem_um = np.array([
-                    cal.area_to_conc_with_error(float(area), float(area_se * self.config.rxn_time))[1]
-                    / self.config.rxn_time
-                    for area, area_se in zip(mean_signal, v_sem_raw * self.config.rxn_time)
-                ])
+                v_sem_um = np.array(
+                    [
+                        cal.area_to_conc_with_error(float(area), float(area_se * self.config.rxn_time))[1]
+                        / self.config.rxn_time
+                        for area, area_se in zip(mean_signal, v_sem_raw * self.config.rxn_time)
+                    ],
+                )
             else:
                 # Simplified approximation: ignores calibration parameter uncertainty
                 v_sem_um = v_sem_raw / cal.slope
@@ -376,19 +378,25 @@ class EnzymeKineticsAnalysis:
             x_line = np.linspace(s_inv.min(), s_inv.max(), 200)
             slope = lb.extra["slope"]
             intercept = lb.extra["intercept"]
-            ax.plot(x_line, slope * x_line + intercept, "--", color="red",
-                    label=f"R²={lb.r_squared:.4f}")
+            ax.plot(
+                x_line, slope * x_line + intercept, "--", color="red",
+                label=f"R²={lb.r_squared:.4f}",
+            )
 
             # Annotate intercepts
             if not np.isnan(lb.vmax) and intercept != 0:
                 ax.axhline(intercept, color="grey", lw=0.8, ls=":")
-                ax.annotate(f"1/Vmax={intercept:.3g}", xy=(s_inv.min(), intercept),
-                            fontsize=7, color="grey", va="bottom")
+                ax.annotate(
+                    f"1/Vmax={intercept:.3g}", xy=(s_inv.min(), intercept),
+                    fontsize=7, color="grey", va="bottom",
+                )
             if not np.isnan(lb.km) and slope != 0:
                 x_int = -intercept / slope
                 ax.axvline(x_int, color="orange", lw=0.8, ls=":")
-                ax.annotate(f"−1/Km={x_int:.3g}", xy=(x_int, v_inv.min()),
-                            fontsize=7, color="orange", ha="right")
+                ax.annotate(
+                    f"−1/Km={x_int:.3g}", xy=(x_int, v_inv.min()),
+                    fontsize=7, color="orange", ha="right",
+                )
 
             ax.set_title(peak_id, fontweight="bold")
             ax.set_xlabel("1/[S] (µM⁻¹)")
@@ -444,8 +452,10 @@ class EnzymeKineticsAnalysis:
             residuals = v - v_pred
 
             ax.axhline(0, color="black", lw=0.8, ls="--")
-            ax.errorbar(s, residuals, yerr=v_sem, fmt="o", color="steelblue",
-                        alpha=0.7, capsize=3)
+            ax.errorbar(
+                s, residuals, yerr=v_sem, fmt="o", color="steelblue",
+                alpha=0.7, capsize=3,
+            )
             ax.set_title(peak_id, fontweight="bold")
             ax.set_xlabel("[S] (µM)")
             ax.set_ylabel("Residual (v − v̂)")
@@ -509,9 +519,11 @@ class EnzymeKineticsAnalysis:
             ax.set_title(title, fontweight="bold")
             ax.set_ylabel(ylabel)
             if all(np.isnan(v) for v in vals):
-                ax.text(0.5, 0.5, "No data\n(calibration required?)",
-                        transform=ax.transAxes, ha="center", va="center",
-                        color="grey", fontsize=10)
+                ax.text(
+                    0.5, 0.5, "No data\n(calibration required?)",
+                    transform=ax.transAxes, ha="center", va="center",
+                    color="grey", fontsize=10,
+                )
 
         _bar(ax_km, km_vals, km_errs, "Km", "Km (µM)")
         _bar(ax_vmax, vmax_vals, vmax_errs, "Vmax", "Vmax (signal/min)")
