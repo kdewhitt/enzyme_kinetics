@@ -12,7 +12,7 @@ from typing import Dict, List, Optional, Tuple
 import numpy as np
 import pandas as pd
 
-from models import MichaelisMentenModel, LineweauerBurkModel, KineticParameters
+from models import MichaelisMentenModel, LineweaverBurkModel, KineticParameters
 from calibration import CalibrationCurve, CalibrationParameters
 
 
@@ -99,7 +99,7 @@ class EnzymeKineticsAnalyzer:
         self.calibration = calibration
         
         self.mm_model = MichaelisMentenModel()
-        self.lb_model = LineweauerBurkModel()
+        self.lb_model = LineweaverBurkModel()
         
         self.results: List[EnzymeKineticsResult] = []
     

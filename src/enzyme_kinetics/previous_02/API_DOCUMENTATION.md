@@ -66,7 +66,7 @@ print(f"Vmax = {params.Vmax:.2f} ± {params.Vmax_std:.2f}")
 print(f"R² = {params.r2:.4f}")
 ```
 
-#### `LineweauerBurkModel(EnzymeKineticModel)`
+#### `LineweaverBurkModel(EnzymeKineticModel)`
 
 Lineweaver-Burk linearization: `1/v = (Km/Vmax) × (1/[S]) + 1/Vmax`
 

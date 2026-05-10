@@ -12,7 +12,7 @@ Your enzyme kinetics analysis code has been **refactored into a production-quali
 
 | Module | Purpose | Classes |
 |--------|---------|---------|
-| **models.py** | Kinetic models | `MichaelisMentenModel`, `LineweauerBurkModel`, `SubstrateInhibitionModel` |
+| **models.py** | Kinetic models | `MichaelisMentenModel`, `LineweaverBurkModel`, `SubstrateInhibitionModel` |
 | **calibration.py** | HPLC calibration | `CalibrationCurve`, `CalibrationParameters` |
 | **analyzer.py** | Main analysis engine | `EnzymeKineticsAnalyzer`, `EnzymeKineticsResult` |
 | **plotting.py** | Visualization | `KineticsPlotter` |
@@ -143,7 +143,7 @@ HPLC Data (CSV)
     → EnzymeKineticsAnalyzer.analyze_dataframe()
         ↓
         → MichaelisMentenModel.fit()
-        → LineweauerBurkModel.fit()
+        → LineweaverBurkModel.fit()
         → CalibrationCurve.apply()
         ↓
         → EnzymeKineticsResult (per peak)
@@ -163,7 +163,7 @@ Results + Plots
 ```
 EnzymeKineticModel (ABC)
     ├── MichaelisMentenModel
-    ├── LineweauerBurkModel
+    ├── LineweaverBurkModel
     └── SubstrateInhibitionModel
 ```
 

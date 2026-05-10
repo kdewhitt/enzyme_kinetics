@@ -61,7 +61,7 @@ enzyme_kinetics/
 ### Models
 
 - **`MichaelisMentenModel`**: Non-linear MM fitting (Levenberg-Marquardt)
-- **`LineweauerBurkModel`**: Lineweaver-Burk linearization
+- **`LineweaverBurkModel`**: Lineweaver-Burk linearization
 - **`SubstrateInhibitionModel`**: MM with substrate inhibition term
 
 ### Data

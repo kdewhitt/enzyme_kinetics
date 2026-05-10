@@ -7,7 +7,12 @@ authors = [
     { name = "Kristofer Gonzalez-DeWhitt", email = "k.gonzalez.dewhitt@gmail.com" }
 ]
 requires-python = ">=3.14"
-dependencies = []
+dependencies = [
+    "numpy>=2.4.4",
+    "pandas>=3.0.2",
+    "scipy>=1.17.1",
+    "scipy-stubs>=1.17.1.4",
+]
 
 [project.scripts]
 enzyme-kinetics = "enzyme_kinetics:main"

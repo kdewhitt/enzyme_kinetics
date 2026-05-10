@@ -195,7 +195,7 @@ class MichaelisMentenModel(EnzymeKineticModel):
         return params, fit_data
 
 
-class LineweauerBurkModel(EnzymeKineticModel):
+class LineweaverBurkModel(EnzymeKineticModel):
     """
     Lineweaver-Burk linearization of Michaelis-Menten kinetics.
     

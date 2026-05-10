@@ -44,7 +44,7 @@
 ```python
 from models import (
     MichaelisMentenModel,
-    LineweauerBurkModel,
+    LineweaverBurkModel,
     SubstrateInhibitionModel,
     KineticParameters,
     EnzymeKineticModel
@@ -64,7 +64,7 @@ from plotting import KineticsPlotter
 **Classes:**
 - `EnzymeKineticModel` (abstract base)
 - `MichaelisMentenModel` (non-linear MM)
-- `LineweauerBurkModel` (linearization)
+- `LineweaverBurkModel` (linearization)
 - `SubstrateInhibitionModel` (with inhibition)
 - `KineticParameters` (data container)
 
