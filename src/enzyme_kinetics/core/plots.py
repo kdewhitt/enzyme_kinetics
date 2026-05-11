@@ -2,230 +2,38 @@ from __future__ import annotations
 
 import logging
 from pathlib import Path
-from typing import Any, Final, Self
+from typing import Any, Self
 
 import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
+from kgdlibs.pathtools import PathBuilder
 
-from .calibration import Calibration
-from .config import KineticsConfig
-from .kinetics_core import (
-    derive_constants,
-    fit_hill,
-    fit_lineweaver_burk,
-    fit_michaelis_menten,
-    FitResult,
-    KineticConstants,
-    lineweaver_burk_transform,
-    prepare_velocity,
-)
+from .derive import KineticConstants
+from .models import lineweaver_burk_transform
+from .utils import extract_peak_data
 
 _logger = logging.getLogger(__name__)
 
-SUBSTRATE_CONC: Final[str] = "substrate_conc"
-COUNT = "count"
-MEAN = "mean"
-PEAK_ID = "peak_id"
-# PROTEIN = "protein"
-# REL_ACT = "rel_activity"
-STD = "std"
 
-
-# ---------------------------------------------------------------------------
-# Per-peak data extraction
-# FIX 3: unpack four values from prepare_velocity (now returns mean_signal too)
-# ---------------------------------------------------------------------------
-
-def _extract_peak_data(
-    df: pd.DataFrame,
-    peak_id: str,
-    rxn_time: float,
-) -> tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray] | None:
-    """Extract substrate concentrations, velocity, SEM, and raw area for a peak.
-
-    FIX 3: Returns raw mean_signal as the fourth element, enabling
-    apply_calibration to work directly on area rather than reconstructing
-    it from velocity — avoiding the fragile v * rxn_time round-trip.
-
-    Args:
-        df: DataFrame containing all peaks.
-        peak_id: The peak identifier to filter on.
-        rxn_time: Reaction time in seconds used to convert area to velocity.
-
-    Returns:
-        Tuple of (s, v, v_sem, mean_signal), or None if no valid data.
-    """
-    sub = df.loc[df[PEAK_ID] == peak_id].dropna(subset=[SUBSTRATE_CONC, MEAN])
-    if sub.empty or sub[MEAN].max() == 0:
-        return None
-    return prepare_velocity(
-        sub[SUBSTRATE_CONC].values,
-        sub[MEAN].values,  # velocity?
-        sub[STD].values,
-        sub[COUNT].values,
-        rxn_time,
-    )
-
-
-# ---------------------------------------------------------------------------
-# Model selection strategy
-# ---------------------------------------------------------------------------
-
-def _select_and_fit(
-    peak_id: str,
-    s: np.ndarray,
-    v: np.ndarray,
-    v_sem: np.ndarray,
-    *,
-    special_peaks: dict[str, str] | None = None,
-) -> FitResult:
-    special = (special_peaks or {}).get(peak_id)
-    if special == "hill":
-        return fit_hill(s, v, sigma=v_sem)
-    return fit_michaelis_menten(s, v, sigma=v_sem)
-
-
-# ---------------------------------------------------------------------------
-# Orchestrator
-# ---------------------------------------------------------------------------
-
-class EnzymeKineticsAnalysis:
+class KineticPlots:
     def __init__(
         self,
         path: str | Path,
-        target_dir: str | Path,
-        *,
-        config: KineticsConfig | None = None,
-        special_peaks: dict[str, str] | None = None,
+        data: pd.DataFrame,
+        results: dict[str, KineticConstants],
+        reaction_time_seconds: float,
+        overwrite: bool = False,
     ) -> None:
-        self.path = Path(path).expanduser().resolve()
-        self.dest = Path(target_dir).expanduser().resolve()
-        self.config = config or KineticsConfig()
-        self.special_peaks = special_peaks or {}
+        self.path = Path(path)
+        self.df = data
+        self.results = results
+        self.reaction_time_seconds = reaction_time_seconds
+        self.overwrite = overwrite
 
-        self.df: pd.DataFrame = pd.DataFrame()
-        self.results: dict[str, KineticConstants] = {}
-        self.calibration: Calibration | None = None
-
-    # -- pipeline stages ---------------------------------------------------
-
-    def load(self, **kwargs: Any) -> Self:
-        self.df = self.config.load(self.path, **kwargs)
-        self.df.sort_values(by=[PEAK_ID, SUBSTRATE_CONC], inplace=True)
-        _logger.info("Loaded %d peaks from %s", len(self.df), self.path)
-        return self
-
-    def fit(self) -> Self:
-        self.results.clear()
-        for peak_id in self.df[PEAK_ID].unique():
-            data = _extract_peak_data(self.df, peak_id, self.config.rxn_time)
-            if data is None:
-                continue
-            s, v, v_sem, _ = data  # raw area not needed at fit stage
-            try:
-                mm_fit = _select_and_fit(
-                    peak_id, s, v, v_sem, special_peaks=self.special_peaks,
-                )
-                lb_fit: FitResult | None = None
-                try:
-                    lb_fit = fit_lineweaver_burk(s, v)
-                except Exception:
-                    pass
-                self.results[peak_id] = derive_constants(
-                    peak_id, mm_fit, self.config.prot_conc, lb_fit=lb_fit,
-                )
-                print(f"✓ {peak_id}: {self.results[peak_id]}")
-
-            except Exception as exc:
-                _logger.warning("Fit failed for %s: %s", peak_id, exc)
-        return self
-
-    def apply_calibration(
-        self,
-        cal: Calibration,
-        *,
-        precise_sem: bool = True,  # FIX 4: user-selectable SEM scaling method
-    ) -> Self:
-        """Re-fit all peaks using calibrated concentration velocities.
-
-        FIX 3: Calibration is now applied directly to the raw mean_signal
-        (peak area) before dividing by rxn_time, avoiding the fragile
-        reconstruction of area from velocity that existed in the original.
-
-        FIX 4: Two v_sem scaling modes are available:
-            precise_sem=True  (default): uses area_to_conc_with_error per
-                data point for full delta-method propagation including
-                slope_se and intercept_se contributions.
-            precise_sem=False: simplified approximation v_sem / slope,
-                appropriate when calibration uncertainty is negligible
-                compared to replicate variance.
-
-        This method rebuilds self.results from self.df on every call, making
-        it safe to call more than once (e.g., after updating the calibration).
-
-        FIX 6: Warns if the calibration does not pass is_valid().
-
-        Args:
-            cal: A Calibration object produced by fit_calibration().
-            precise_sem: If True, use full delta-method SEM propagation
-                (recommended). If False, use the simplified slope-only
-                approximation.
-
-        Returns:
-            self, for method chaining.
-        """
-        # FIX 6: guard with calibration validity check
-        if not cal.is_valid():
-            _logger.warning(
-                "Calibration does not meet quality thresholds "
-                "(R²=%.4f, slope=%.4g). Results may be unreliable.",
-                cal.r_squared, cal.slope,
-            )
-
-        self.calibration = cal
-        recalculated: dict[str, KineticConstants] = {}
-
-        for peak_id, kc in self.results.items():
-            data = _extract_peak_data(self.df, peak_id, self.config.rxn_time)
-            if data is None:
-                continue
-
-            # FIX 3: unpack raw area; apply calibration directly to area
-            s, _v_raw, v_sem_raw, mean_signal = data
-
-            # Convert area → µM concentration, then divide by rxn_time for velocity
-            v_um = np.asarray(cal.area_to_conc(mean_signal)) / self.config.rxn_time
-
-            # FIX 4: precise vs. simplified SEM scaling
-            if precise_sem:
-                # Full delta-method per data point: propagates slope_se and intercept_se
-                v_sem_um = np.array(
-                    [
-                        cal.area_to_conc_with_error(float(area), float(area_se * self.config.rxn_time))[1]
-                        / self.config.rxn_time
-                        for area, area_se in zip(mean_signal, v_sem_raw * self.config.rxn_time)
-                    ],
-                )
-            else:
-                # Simplified approximation: ignores calibration parameter uncertainty
-                v_sem_um = v_sem_raw / cal.slope
-
-            try:
-                mm_fit = fit_michaelis_menten(s, v_um, sigma=v_sem_um)
-                recalculated[peak_id] = derive_constants(
-                    peak_id, mm_fit, self.config.prot_conc, lb_fit=kc.lb_fit,
-                )
-            except Exception as exc:
-                _logger.warning("Calibrated re-fit failed for %s: %s", peak_id, exc)
-
-        self.results = recalculated
-        return self
-
-    # -- output ------------------------------------------------------------
-
-    def to_dataframe(self) -> pd.DataFrame:
-        return pd.DataFrame([kc.to_dict() for kc in self.results.values()])
+    def _make_builder(self) -> PathBuilder:
+        """Returns a PathBuilder seeded with the acquisition date and destination path."""
+        return PathBuilder.from_path(self.path, suffix=".png", overwrite=self.overwrite)
 
     def plot(self, *, show: bool = False, cols: int = 3) -> Self:
         """Plot MM (or Hill) fit curves for all peaks in a multi-panel grid.
@@ -251,7 +59,7 @@ class EnzymeKineticsAnalysis:
 
         for i, peak_id in enumerate(peaks):
             ax = axes[i]
-            data = _extract_peak_data(self.df, peak_id, self.config.rxn_time)
+            data = extract_peak_data(self.df, peak_id, self.reaction_time_seconds)
             kc = self.results[peak_id]
 
             if data is None:
@@ -286,7 +94,7 @@ class EnzymeKineticsAnalysis:
             axes[j].axis("off")
 
         fig.tight_layout()
-        plot_path = self.dest / f"{self.path.stem}_kinetics.png"
+        plot_path = self._make_builder().with_tag("kinetics")
         fig.savefig(plot_path, dpi=300)
         if show:
             plt.show()
@@ -320,7 +128,7 @@ class EnzymeKineticsAnalysis:
 
         for i, peak_id in enumerate(lb_peaks):
             ax = axes[i]
-            data = _extract_peak_data(self.df, peak_id, self.config.rxn_time)
+            data = extract_peak_data(self.df, peak_id, self.reaction_time_seconds)
             kc = self.results[peak_id]
             lb = kc.lb_fit  # guaranteed not None
 
@@ -366,7 +174,7 @@ class EnzymeKineticsAnalysis:
             axes[j].axis("off")
 
         fig.tight_layout()
-        plot_path = self.dest / f"{self.path.stem}_lineweaver_burk.png"
+        plot_path = self._make_builder().with_tag("lineweaver_burk")
         fig.savefig(plot_path, dpi=300)
         if show:
             plt.show()
@@ -399,7 +207,7 @@ class EnzymeKineticsAnalysis:
 
         for i, peak_id in enumerate(peaks):
             ax = axes[i]
-            data = _extract_peak_data(self.df, peak_id, self.config.rxn_time)
+            data = extract_peak_data(self.df, peak_id, self.reaction_time_seconds)
             kc = self.results[peak_id]
 
             if data is None:
@@ -423,7 +231,7 @@ class EnzymeKineticsAnalysis:
             axes[j].axis("off")
 
         fig.tight_layout()
-        plot_path = self.dest / f"{self.path.stem}_residuals.png"
+        plot_path = self._make_builder().with_tag("residuals")
         fig.savefig(plot_path, dpi=300)
         if show:
             plt.show()
@@ -459,8 +267,8 @@ class EnzymeKineticsAnalysis:
         # kcat and kcat/Km may be nan if calibration not applied; handled explicitly
         kcat_vals = [kc.kcat for kc in kcs]
         kcat_errs = [kc.kcat_se for kc in kcs]
-        kcat_km_vals = [kc.kcat_km for kc in kcs]
-        kcat_km_errs = [kc.kcat_km_se for kc in kcs]
+        kcat_km_vals = [kc.kcat_km_M for kc in kcs]
+        kcat_km_errs = [kc.kcat_km_se_M for kc in kcs]
 
         x = np.arange(len(peaks))
         bar_kw: dict[str, Any] = dict(capsize=4, alpha=0.8, width=0.6)
@@ -487,37 +295,13 @@ class EnzymeKineticsAnalysis:
         _bar(ax_km, km_vals, km_errs, "Km", "Km (µM)")
         _bar(ax_vmax, vmax_vals, vmax_errs, "Vmax", "Vmax (signal/min)")
         _bar(ax_kcat, kcat_vals, kcat_errs, "kcat", "kcat (s⁻¹)")
-        _bar(ax_kcat_km, kcat_km_vals, kcat_km_errs, "kcat / Km", "kcat/Km (µM⁻¹·s⁻¹)")
+        _bar(ax_kcat_km, kcat_km_vals, kcat_km_errs, "kcat / Km", "kcat/Km (M⁻¹·s⁻¹)")
 
         fig.tight_layout()
-        plot_path = self.dest / f"{self.path.stem}_efficiency.png"
+        plot_path = self._make_builder().with_tag("efficiency")
         fig.savefig(plot_path, dpi=300)
         if show:
             plt.show()
         plt.close(fig)
         _logger.info("Saved efficiency comparison plot to %s", plot_path)
         return self
-
-    def export_csv(self) -> Self:
-        stats_df = self.to_dataframe()
-        if stats_df.empty:
-            _logger.warning("No kinetics data to export.")
-            return self
-        csv_path = self.config.build_export_path(
-            self.dest, tag=self.path.stem,
-        ).with_suffix(".csv")
-        stats_df.to_csv(csv_path, index=False)
-        _logger.info("Exported %s rows to %s", len(stats_df), csv_path)
-        return self
-
-    def run(self, **kwargs: Any) -> Self:
-        """Full pipeline: load → fit → plot → Lineweaver-Burk → residuals → efficiency → CSV."""
-        return (
-            self.load(**kwargs)
-            .fit()
-            .plot()
-            .plot_lineweaver_burk()
-            .plot_residuals()
-            .plot_efficiency_comparison()
-            .export_csv()
-        )

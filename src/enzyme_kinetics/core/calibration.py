@@ -9,7 +9,7 @@ import matplotlib.pyplot as plt
 import numpy as np
 from scipy.optimize import curve_fit
 
-from .kinetics_core import r_squared
+from .models import r_squared
 
 _logger = logging.getLogger(__name__)
 
@@ -111,6 +111,11 @@ class Calibration:
         return conc, conc_se
 
 
+# ---------------------------------------------------------------------------
+# Fitting — thin wrappers around curve_fit
+# ---------------------------------------------------------------------------
+
+
 def fit_calibration(
     concentrations: np.ndarray,
     peak_areas: np.ndarray,
@@ -137,6 +142,11 @@ def fit_calibration(
         n_points=len(concentrations),
         conc_range=(float(concentrations.min()), float(concentrations.max())),
     )
+
+
+# ---------------------------------------------------------------------------
+# Legacy
+# ---------------------------------------------------------------------------
 
 
 def save_calibration(cal: Calibration, path: Path, nice: bool = False) -> None:
