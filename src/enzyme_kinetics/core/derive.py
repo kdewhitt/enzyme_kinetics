@@ -1,14 +1,14 @@
 from __future__ import annotations
 
-import logging
 from dataclasses import dataclass
 from typing import Any
 
 import numpy as np
+from logurich import RichLogAdapter
 
 from .models import FitResult
 
-_logger = logging.getLogger(__name__)
+_logger = RichLogAdapter(component=__name__)
 
 # ---------------------------------------------------------------------------
 # FIX 1 — kcat/Km error propagation using full covariance matrix

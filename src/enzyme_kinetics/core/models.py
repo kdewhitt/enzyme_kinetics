@@ -1,14 +1,14 @@
 from __future__ import annotations
 
-import logging
 from dataclasses import dataclass, field
 from typing import Any, Callable
 
 import numpy as np
+from logurich import RichLogAdapter
 from scipy.optimize import curve_fit
 from scipy.stats import linregress
 
-_logger = logging.getLogger(__name__)
+_logger = RichLogAdapter(component=__name__)
 
 
 # ---------------------------------------------------------------------------
@@ -39,6 +39,10 @@ def michaelis_menten(s: np.ndarray, vmax: float, km: float) -> np.ndarray:
 def hill_equation(s: np.ndarray, vmax: float, k_half: float, n: float) -> np.ndarray:
     """Hill equation. k_half is the half-saturation constant, equal to Km only when n == 1."""
     return (vmax * s ** n) / (k_half ** n + s ** n)
+
+
+def threshold_michaelis_menten(s: np.ndarray, vmax: float, km: float, s0: float) -> np.ndarray:
+    return np.where(s > s0, (vmax * (s - s0)) / (km + (s - s0)), 0.0)
 
 
 def substrate_inhibition(s: np.ndarray, vmax: float, km: float, ki: float) -> np.ndarray:
@@ -293,10 +297,7 @@ def fit_substrate_inhibition(
     return fit_model(substrate_inhibition, s, v, p0, sigma=sigma, model_type="si")
 
 
-def fit_lineweaver_burk(
-    s: np.ndarray,
-    v: np.ndarray,
-) -> FitResult:
+def fit_lineweaver_burk(s: np.ndarray, v: np.ndarray) -> FitResult:
     s_inv, v_inv = lineweaver_burk_transform(s, v)
     slope, intercept, r_value, _, std_err = linregress(s_inv, v_inv)
     r2 = r_value ** 2

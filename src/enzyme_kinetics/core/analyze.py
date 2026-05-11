@@ -1,12 +1,12 @@
 from __future__ import annotations
 
-import logging
 from pathlib import Path
 from typing import Self
 
 import numpy as np
 import pandas as pd
 from kgdlibs.pathtools import PathBuilder
+from logurich import RichLogAdapter
 
 from .calibration import Calibration
 from .derive import derive_constants, KineticConstants
@@ -14,7 +14,7 @@ from .models import fit_hill, fit_lineweaver_burk, fit_michaelis_menten, FitResu
 from .plots import KineticPlots
 from .utils import extract_peak_data
 
-_logger = logging.getLogger(__name__)
+_logger = RichLogAdapter(component=__name__)
 
 
 # ---------------------------------------------------------------------------
@@ -75,7 +75,7 @@ class KineticAnalyzer:
                 self.results[peak_id] = derive_constants(
                     peak_id, mm_fit, self.enzyme_conc_um, lb_fit=lb_fit,
                 )
-                print(f"✓ {peak_id}: {self.results[peak_id]}")
+                _logger.success(f"✓ {peak_id}: {self.results[peak_id]}")
 
             except Exception as exc:
                 _logger.warning("Fit failed for %s: %s", peak_id, exc)

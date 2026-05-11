@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import logging
 from pathlib import Path
 from typing import Any, Self
 
@@ -8,12 +7,13 @@ import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
 from kgdlibs.pathtools import PathBuilder
+from logurich import RichLogAdapter
 
 from .derive import KineticConstants
 from .models import lineweaver_burk_transform
 from .utils import extract_peak_data
 
-_logger = logging.getLogger(__name__)
+_logger = RichLogAdapter(component=__name__)
 
 
 class KineticPlots:
