@@ -2,7 +2,8 @@ from __future__ import annotations
 
 import logging
 from dataclasses import dataclass, field
-from typing import Any, Callable
+from typing import Any
+from collections.abc import Callable
 
 import numpy as np
 from scipy.optimize import curve_fit
@@ -11,9 +12,10 @@ from scipy.stats import linregress
 _logger = logging.getLogger(__name__)
 
 
-# ---------------------------------------------------------------------------
+# ---------------------------------------------------------------------
 # Pure model functions — no classes, no state
-# ---------------------------------------------------------------------------
+# ---------------------------------------------------------------------
+
 
 def michaelis_menten(s: np.ndarray, vmax: float, km: float) -> np.ndarray:
     return (vmax * s) / (km + s)
@@ -21,24 +23,27 @@ def michaelis_menten(s: np.ndarray, vmax: float, km: float) -> np.ndarray:
 
 def hill_equation(s: np.ndarray, vmax: float, k_half: float, n: float) -> np.ndarray:
     """Hill equation. k_half is the half-saturation constant, equal to Km only when n == 1."""
-    return (vmax * s ** n) / (k_half ** n + s ** n)
+    return (vmax * s**n) / (k_half**n + s**n)
 
 
-def substrate_inhibition(s: np.ndarray, vmax: float, km: float, ki: float) -> np.ndarray:
-    return (vmax * s) / (km + s + (s ** 2) / ki)
+def substrate_inhibition(
+    s: np.ndarray, vmax: float, km: float, ki: float
+) -> np.ndarray:
+    return (vmax * s) / (km + s + (s**2) / ki)
 
 
 def lineweaver_burk_transform(
-        s: np.ndarray,
-        v: np.ndarray,
+    s: np.ndarray,
+    v: np.ndarray,
 ) -> tuple[np.ndarray, np.ndarray]:
     mask = (s > 0) & (v > 0)
     return 1.0 / s[mask], 1.0 / v[mask]
 
 
-# ---------------------------------------------------------------------------
+# ---------------------------------------------------------------------
 # Fit result — frozen, model-agnostic
-# ---------------------------------------------------------------------------
+# ---------------------------------------------------------------------
+
 
 @dataclass(frozen=True, slots=True)
 class FitResult:
@@ -58,10 +63,10 @@ class FitResult:
     model_func: Callable[..., np.ndarray]
     popt: tuple[float, ...]
     perr: tuple[float, ...]
-    pcov: np.ndarray          # FIX 1: carry full covariance for correlated propagation
+    pcov: np.ndarray  # FIX 1: carry full covariance for correlated propagation
     r_squared: float
     n_points: int
-    model_type: str = "mm"    # FIX 7: track model identity for correct property semantics
+    model_type: str = "mm"  # FIX 7: track model identity for correct property semantics
     extra: dict[str, Any] = field(default_factory=dict)
 
     @property
@@ -86,28 +91,36 @@ class FitResult:
     def k_half(self) -> float:
         """Half-saturation constant from a Hill fit (popt[1]). Raises if model is not 'hill'."""
         if self.model_type != "hill":
-            raise AttributeError(f"k_half is only defined for Hill fits; this is '{self.model_type}'")
+            raise AttributeError(
+                f"k_half is only defined for Hill fits; this is '{self.model_type}'"
+            )
         return self.popt[1]
 
     @property
     def k_half_se(self) -> float:
         """SE of k_half from a Hill fit. Raises if model is not 'hill'."""
         if self.model_type != "hill":
-            raise AttributeError(f"k_half_se is only defined for Hill fits; this is '{self.model_type}'")
+            raise AttributeError(
+                f"k_half_se is only defined for Hill fits; this is '{self.model_type}'"
+            )
         return self.perr[1]
 
     @property
     def hill_n(self) -> float:
         """Hill cooperativity coefficient (popt[2]). Raises if model is not 'hill'."""
         if self.model_type != "hill":
-            raise AttributeError(f"hill_n is only defined for Hill fits; this is '{self.model_type}'")
+            raise AttributeError(
+                f"hill_n is only defined for Hill fits; this is '{self.model_type}'"
+            )
         return self.popt[2]
 
     @property
     def hill_n_se(self) -> float:
         """SE of Hill n (perr[2]). Raises if model is not 'hill'."""
         if self.model_type != "hill":
-            raise AttributeError(f"hill_n_se is only defined for Hill fits; this is '{self.model_type}'")
+            raise AttributeError(
+                f"hill_n_se is only defined for Hill fits; this is '{self.model_type}'"
+            )
         return self.perr[2]
 
     # FIX 4 — typed Ki accessor for substrate-inhibition fits.
@@ -115,14 +128,18 @@ class FitResult:
     def ki(self) -> float:
         """Substrate inhibition constant Ki (popt[2]). Raises if model is not 'si'."""
         if self.model_type != "si":
-            raise AttributeError(f"ki is only defined for substrate-inhibition fits; this is '{self.model_type}'")
+            raise AttributeError(
+                f"ki is only defined for substrate-inhibition fits; this is '{self.model_type}'"
+            )
         return self.popt[2]
 
     @property
     def ki_se(self) -> float:
         """SE of Ki (perr[2]). Raises if model is not 'si'."""
         if self.model_type != "si":
-            raise AttributeError(f"ki_se is only defined for substrate-inhibition fits; this is '{self.model_type}'")
+            raise AttributeError(
+                f"ki_se is only defined for substrate-inhibition fits; this is '{self.model_type}'"
+            )
         return self.perr[2]
 
     def predict(self, s: np.ndarray) -> np.ndarray:
@@ -137,24 +154,27 @@ def _r_squared(observed: np.ndarray, predicted: np.ndarray) -> float:
     return 1.0 - ss_res / ss_tot
 
 
-# ---------------------------------------------------------------------------
+# ---------------------------------------------------------------------
 # Fitting — thin wrappers around curve_fit
-# ---------------------------------------------------------------------------
+# ---------------------------------------------------------------------
+
 
 def fit_model(
-        model_func: Callable[..., np.ndarray],
-        s: np.ndarray,
-        v: np.ndarray,
-        p0: list[float],
-        *,
-        sigma: np.ndarray | None = None,
-        bounds: tuple = (0, np.inf),
-        maxfev: int = 10_000,
-        model_type: str = "mm",
+    model_func: Callable[..., np.ndarray],
+    s: np.ndarray,
+    v: np.ndarray,
+    p0: list[float],
+    *,
+    sigma: np.ndarray | None = None,
+    bounds: tuple = (0, np.inf),
+    maxfev: int = 10_000,
+    model_type: str = "mm",
 ) -> FitResult:
     effective_sigma = sigma if sigma is not None and np.any(sigma > 0) else None
     popt, pcov = curve_fit(
-        model_func, s, v,
+        model_func,
+        s,
+        v,
         p0=p0,
         sigma=effective_sigma,
         absolute_sigma=True,
@@ -167,20 +187,20 @@ def fit_model(
         model_func=model_func,
         popt=tuple(popt.tolist()),
         perr=perr,
-        pcov=pcov,                  # FIX 1: store full covariance matrix
+        pcov=pcov,  # FIX 1: store full covariance matrix
         r_squared=_r_squared(v, predicted),
         n_points=len(s),
-        model_type=model_type,      # FIX 7: propagate model tag
+        model_type=model_type,  # FIX 7: propagate model tag
     )
 
 
 def fit_michaelis_menten(
-        s: np.ndarray,
-        v: np.ndarray,
-        *,
-        sigma: np.ndarray | None = None,
-        vmax_init: float | None = None,
-        km_init: float | None = None,
+    s: np.ndarray,
+    v: np.ndarray,
+    *,
+    sigma: np.ndarray | None = None,
+    vmax_init: float | None = None,
+    km_init: float | None = None,
 ) -> FitResult:
     """Fit the Michaelis-Menten equation to velocity data.
 
@@ -202,14 +222,16 @@ def fit_michaelis_menten(
     """
     vmax_guess = vmax_init if vmax_init is not None else float(np.max(v))
     km_guess = km_init if km_init is not None else float(np.median(s))
-    return fit_model(michaelis_menten, s, v, [vmax_guess, km_guess], sigma=sigma, model_type="mm")
+    return fit_model(
+        michaelis_menten, s, v, [vmax_guess, km_guess], sigma=sigma, model_type="mm"
+    )
 
 
 def fit_hill(
-        s: np.ndarray,
-        v: np.ndarray,
-        *,
-        sigma: np.ndarray | None = None,
+    s: np.ndarray,
+    v: np.ndarray,
+    *,
+    sigma: np.ndarray | None = None,
 ) -> FitResult:
     """Fit the Hill equation. The second parameter is k_half, not Km."""
     p0 = [float(np.max(v)), float(np.median(s)), 2.0]
@@ -217,10 +239,10 @@ def fit_hill(
 
 
 def fit_substrate_inhibition(
-        s: np.ndarray,
-        v: np.ndarray,
-        *,
-        sigma: np.ndarray | None = None,
+    s: np.ndarray,
+    v: np.ndarray,
+    *,
+    sigma: np.ndarray | None = None,
 ) -> FitResult:
     """Fit the substrate-inhibition model. Ki is accessible via FitResult.ki."""
     p0 = [float(np.max(v)), float(np.median(s)), float(np.max(s))]
@@ -228,12 +250,12 @@ def fit_substrate_inhibition(
 
 
 def fit_lineweaver_burk(
-        s: np.ndarray,
-        v: np.ndarray,
+    s: np.ndarray,
+    v: np.ndarray,
 ) -> FitResult:
     s_inv, v_inv = lineweaver_burk_transform(s, v)
     slope, intercept, r_value, _, std_err = linregress(s_inv, v_inv)
-    r2 = r_value ** 2
+    r2 = r_value**2
     vmax = 1.0 / intercept if intercept != 0 else np.nan
     km = slope * vmax if not np.isnan(vmax) else np.nan
     # LB std errors live in reciprocal space and do not map cleanly to parameter
@@ -251,18 +273,18 @@ def fit_lineweaver_burk(
     )
 
 
-# ---------------------------------------------------------------------------
+# ---------------------------------------------------------------------
 # FIX 1 — kcat/Km error propagation using full covariance matrix
-# ---------------------------------------------------------------------------
+# ---------------------------------------------------------------------
 
 _UM_TO_M: float = 1e-6  # unit conversion factor: µM → M
 
 
 def _kcat_km_with_covariance(
-        vmax: float,
-        km: float,
-        enzyme_conc_um: float,
-        pcov: np.ndarray,
+    vmax: float,
+    km: float,
+    enzyme_conc_um: float,
+    pcov: np.ndarray,
 ) -> tuple[float, float]:
     """Propagate kcat/Km uncertainty using the full Vmax–Km covariance matrix.
 
@@ -310,24 +332,25 @@ def _kcat_km_with_covariance(
     # Partial derivatives of f = vmax / (enzyme_conc_um * km_M)
     # where km_M = km * 1e-6, so ∂f/∂km = ∂f/∂km_M · ∂km_M/∂km = (∂f/∂km_M) * 1e-6
     df_dvmax = 1.0 / (enzyme_conc_um * km_M)
-    df_dkm = -vmax / (enzyme_conc_um * km_M ** 2) * _UM_TO_M
+    df_dkm = -vmax / (enzyme_conc_um * km_M**2) * _UM_TO_M
 
     var_vmax = pcov[0, 0]
     var_km = pcov[1, 1]
     cov_vmax_km = pcov[0, 1]
 
     var_kcat_km = (
-        df_dvmax ** 2 * var_vmax
-        + df_dkm ** 2 * var_km
+        df_dvmax**2 * var_vmax
+        + df_dkm**2 * var_km
         + 2.0 * df_dvmax * df_dkm * cov_vmax_km
     )
     kcat_km_se_M = float(np.sqrt(max(var_kcat_km, 0.0)))  # clamp numerical negatives
     return float(kcat_km_M), kcat_km_se_M
 
 
-# ---------------------------------------------------------------------------
+# ---------------------------------------------------------------------
 # Derived kinetic constants
-# ---------------------------------------------------------------------------
+# ---------------------------------------------------------------------
+
 
 @dataclass(frozen=True, slots=True)
 class KineticConstants:
@@ -356,8 +379,8 @@ class KineticConstants:
     fit: FitResult
     kcat: float
     kcat_se: float
-    kcat_km_M: float        # M⁻¹·s⁻¹; Km converted µM→M before division
-    kcat_km_se_M: float     # SE in M⁻¹·s⁻¹
+    kcat_km_M: float  # M⁻¹·s⁻¹; Km converted µM→M before division
+    kcat_km_se_M: float  # SE in M⁻¹·s⁻¹
     ki: float | None = None
     ki_se: float | None = None
     lb_fit: FitResult | None = None
@@ -401,11 +424,11 @@ class KineticConstants:
 
 
 def derive_constants(
-        peak_id: str,
-        fit: FitResult,
-        enzyme_conc_um: float,
-        *,
-        lb_fit: FitResult | None = None,
+    peak_id: str,
+    fit: FitResult,
+    enzyme_conc_um: float,
+    *,
+    lb_fit: FitResult | None = None,
 ) -> KineticConstants:
     """Compute kcat and kcat/Km from a FitResult.
 
@@ -442,7 +465,10 @@ def derive_constants(
 
     # FIX 1 + units: full covariance propagation; Km converted µM→M inside
     kcat_km_M, kcat_km_se_M = _kcat_km_with_covariance(
-        fit.vmax, fit.km, enzyme_conc_um, fit.pcov,
+        fit.vmax,
+        fit.km,
+        enzyme_conc_um,
+        fit.pcov,
     )
 
     # FIX 4: promote Ki to typed fields for SI fits
@@ -465,10 +491,11 @@ def derive_constants(
     )
 
 
-# ---------------------------------------------------------------------------
+# ---------------------------------------------------------------------
 # Calibration — linear standard curve
 # FIX 2, FIX 6
-# ---------------------------------------------------------------------------
+# ---------------------------------------------------------------------
+
 
 @dataclass(frozen=True, slots=True)
 class Calibration:
@@ -517,9 +544,9 @@ class Calibration:
         return self.slope * conc + self.intercept
 
     def area_to_conc_with_error(
-            self,
-            area: float,
-            area_se: float,
+        self,
+        area: float,
+        area_se: float,
     ) -> tuple[float, float]:
         """Convert a single area measurement to concentration with propagated error.
 
@@ -542,29 +569,34 @@ class Calibration:
         """
         conc = float(self.area_to_conc(area))
         dc_da = 1.0 / self.slope
-        dc_ds = -(area - self.intercept) / (self.slope ** 2)
-        dc_di = -1.0 / self.slope                        # FIX 2: intercept term
-        conc_se = float(np.sqrt(
-            (dc_da * area_se) ** 2
-            + (dc_ds * self.slope_se) ** 2
-            + (dc_di * self.intercept_se) ** 2           # FIX 2
-        ))
+        dc_ds = -(area - self.intercept) / (self.slope**2)
+        dc_di = -1.0 / self.slope  # FIX 2: intercept term
+        conc_se = float(
+            np.sqrt(
+                (dc_da * area_se) ** 2
+                + (dc_ds * self.slope_se) ** 2
+                + (dc_di * self.intercept_se) ** 2  # FIX 2
+            )
+        )
         return conc, conc_se
 
 
 def fit_calibration(
-        concentrations: np.ndarray,
-        peak_areas: np.ndarray,
-        *,
-        sigma: np.ndarray | None = None,
+    concentrations: np.ndarray,
+    peak_areas: np.ndarray,
+    *,
+    sigma: np.ndarray | None = None,
 ) -> Calibration:
     def _linear(x: np.ndarray, slope: float, intercept: float) -> np.ndarray:
         return slope * x + intercept
 
     effective_sigma = sigma if sigma is not None and np.any(sigma > 0) else None
     popt, pcov = curve_fit(
-        _linear, concentrations, peak_areas,
-        sigma=effective_sigma, absolute_sigma=True,
+        _linear,
+        concentrations,
+        peak_areas,
+        sigma=effective_sigma,
+        absolute_sigma=True,
     )
     perr = np.sqrt(np.diag(pcov))
     predicted = _linear(concentrations, *popt)
@@ -578,18 +610,19 @@ def fit_calibration(
     )
 
 
-# ---------------------------------------------------------------------------
+# ---------------------------------------------------------------------
 # Velocity preparation from summary-statistics DataFrames
 # FIX 3: return raw mean_signal alongside velocity so apply_calibration
 #        can apply the calibration directly to area before dividing by rxn_time.
-# ---------------------------------------------------------------------------
+# ---------------------------------------------------------------------
+
 
 def prepare_velocity(
-        s: np.ndarray,
-        mean_signal: np.ndarray,
-        std_signal: np.ndarray,
-        counts: np.ndarray,
-        rxn_time: float,
+    s: np.ndarray,
+    mean_signal: np.ndarray,
+    std_signal: np.ndarray,
+    counts: np.ndarray,
+    rxn_time: float,
 ) -> tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
     """Compute substrate concentrations, reaction velocities, and their SEMs.
 
@@ -617,18 +650,19 @@ def prepare_velocity(
     return s, v, v_sem, mean_signal
 
 
-# ---------------------------------------------------------------------------
+# ---------------------------------------------------------------------
 # Batch analysis helper
-# ---------------------------------------------------------------------------
+# ---------------------------------------------------------------------
+
 
 def analyze_peaks(
-        substrate_conc: dict[str, np.ndarray],
-        velocity: dict[str, np.ndarray],
-        enzyme_conc_um: float,
-        *,
-        velocity_std: dict[str, np.ndarray] | None = None,
-        fit_lb: bool = True,
-        min_points: int = 3,
+    substrate_conc: dict[str, np.ndarray],
+    velocity: dict[str, np.ndarray],
+    enzyme_conc_um: float,
+    *,
+    velocity_std: dict[str, np.ndarray] | None = None,
+    fit_lb: bool = True,
+    min_points: int = 3,
 ) -> dict[str, KineticConstants]:
     results: dict[str, KineticConstants] = {}
     velocity_std = velocity_std or {}
@@ -649,7 +683,10 @@ def analyze_peaks(
                 except Exception:
                     pass
             results[peak_id] = derive_constants(
-                peak_id, mm_fit, enzyme_conc_um, lb_fit=lb_fit,
+                peak_id,
+                mm_fit,
+                enzyme_conc_um,
+                lb_fit=lb_fit,
             )
         except Exception as exc:
             _logger.warning("Fit failed for %s: %s", peak_id, exc)

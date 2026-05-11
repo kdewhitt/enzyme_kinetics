@@ -1,3 +1,25 @@
+"""Kinetic analysis orchestrator for fitting enzyme kinetic models to HPLC data.
+
+Provides KineticAnalyzer, a stateful orchestrator that fits Michaelis-Menten (or
+Hill) models to per-peak substrate-velocity data, optionally re-fits using a
+calibrated concentration scale, and exports results to CSV. The module also exposes
+analyze_peaks, a lower-level batch helper for fitting pre-extracted arrays directly.
+
+Model selection is handled by _select_and_fit, which dispatches to fit_hill for
+peaks listed in special_peaks and defaults to fit_michaelis_menten otherwise.
+Lineweaver-Burk cross-validation fits are attempted for every peak and stored on
+the KineticConstants result; failures are logged and silently skipped.
+
+Typical usage example:
+    >>> analyzer = KineticAnalyzer(
+    ...     enzyme_conc_um=0.5,
+    ...     reaction_time_seconds=3600.0,
+    ...     substrate="HexCoA",
+    ...     data=df,
+    ... )
+    >>> analyzer.fit().apply_calibration(cal).export_csv(dest)
+"""
+
 from __future__ import annotations
 
 from pathlib import Path
@@ -10,16 +32,19 @@ from logurich import RichLogAdapter
 
 from .calibration import Calibration
 from .derive import derive_constants, KineticConstants
-from .models import fit_hill, fit_lineweaver_burk, fit_michaelis_menten, fit_threshold_michaelis_menten, FitResult
+from .models import fit_hill, fit_lineweaver_burk, fit_michaelis_menten, FitResult
 from .plots import KineticPlots
-from .utils import extract_peak_data
+from .preprocess import extract_peak_data
+
+__all__ = ["analyze_peaks", "KineticAnalyzer"]
 
 _logger = RichLogAdapter(component=__name__)
 
 
-# ---------------------------------------------------------------------------
+# ---------------------------------------------------------------------
 # Model selection strategy
-# ---------------------------------------------------------------------------
+# ---------------------------------------------------------------------
+
 
 def _select_and_fit(
     peak_id: str,
@@ -29,6 +54,24 @@ def _select_and_fit(
     *,
     special_peaks: dict[str, str] | None = None,
 ) -> FitResult:
+    """Selects and fits the appropriate kinetic model for a single peak.
+
+    Dispatches to fit_hill when peak_id appears in special_peaks with value
+    "hill". All other peaks default to fit_michaelis_menten. Additional model
+    types can be added to the dispatch block as needed.
+
+    Args:
+        peak_id: Identifier for the HPLC peak being fitted.
+        s: Substrate concentration array in µM.
+        v: Reaction velocity array (area/s before calibration; µM/s after).
+        v_sem: Per-point standard errors on v in the same units as v.
+        special_peaks: Optional mapping of peak_id to model type string. Only
+            "hill" is currently dispatched; unrecognized values fall back to
+            Michaelis-Menten. Defaults to None.
+
+    Returns:
+        FitResult from the selected model fit for the given peak.
+    """
     special = (special_peaks or {}).get(peak_id)
     if special == "hill":
         return fit_hill(s, v, sigma=v_sem)
@@ -38,12 +81,39 @@ def _select_and_fit(
     return fit_michaelis_menten(s, v, sigma=v_sem)
 
 
-# ---------------------------------------------------------------------------
+# ---------------------------------------------------------------------
 # Orchestrator
-# ---------------------------------------------------------------------------
+# ---------------------------------------------------------------------
 
 
 class KineticAnalyzer:
+    """Stateful orchestrator for per-peak enzyme kinetic analysis.
+
+    Fits kinetic models to substrate-velocity data extracted from a DataFrame
+    of HPLC peak measurements, optionally re-fits on calibrated concentration
+    velocities, and exports results. The typical workflow is:
+    fit() → apply_calibration() → plot() → export_csv().
+
+    fit() populates self.results from raw area/s velocities. apply_calibration()
+    rebuilds self.results using µM/s velocities derived from a Calibration object,
+    making kcat and kcat/Km physically meaningful (s⁻¹ and M⁻¹·s⁻¹ respectively).
+    Calling fit() again after apply_calibration() resets results to raw-area fits.
+
+    Attributes:
+        enzyme_conc_um: Total enzyme concentration used for kcat calculation in µM.
+        reaction_time_seconds: Reaction duration used to convert peak area to
+            velocity in seconds.
+        substrate: Substrate name propagated to KineticConstants results.
+        df: Source DataFrame containing peak_id, substrate concentration, and
+            replicate signal columns.
+        special_peaks: Mapping of peak_id to model type string for non-default
+            model dispatch (e.g. {"peakA": "hill"}).
+        results: Mapping of peak_id to KineticConstants populated by fit() or
+            apply_calibration().
+        calibration: Most recently applied Calibration object, or None if
+            apply_calibration() has not been called.
+    """
+
     def __init__(
         self,
         enzyme_conc_um: float,
@@ -52,6 +122,21 @@ class KineticAnalyzer:
         data: pd.DataFrame,
         special_peaks: dict[str, str] | None = None,
     ) -> None:
+        """Initializes the KineticAnalyzer with experimental parameters and data.
+
+        Args:
+            enzyme_conc_um: Total enzyme concentration in µM used to compute kcat.
+            reaction_time_seconds: Reaction duration in seconds used to convert
+                integrated peak area to velocity (area/s).
+            substrate: Substrate name string propagated to all KineticConstants
+                results produced by this analyzer.
+            data: DataFrame containing HPLC peak data with at minimum a "peak_id"
+                column, substrate concentration values, and replicate signal columns
+                as expected by extract_peak_data.
+            special_peaks: Optional mapping of peak_id to model type string
+                controlling model dispatch in _select_and_fit. Defaults to None
+                (all peaks fitted with Michaelis-Menten).
+        """
         self.enzyme_conc_um = enzyme_conc_um
         self.reaction_time_seconds = reaction_time_seconds
         self.substrate = substrate
@@ -62,6 +147,22 @@ class KineticAnalyzer:
         self.calibration: Calibration | None = None
 
     def fit(self) -> Self:
+        """Fits kinetic models to all peaks in self.df using raw area/s velocities.
+
+        Clears self.results before fitting, so calling fit() a second time replaces
+        all previous results. For each unique peak_id, extracts substrate-velocity
+        data via extract_peak_data, selects and fits the primary kinetic model via
+        _select_and_fit, and attempts a Lineweaver-Burk cross-validation fit.
+        Lineweaver-Burk failures are silently swallowed; primary model failures are
+        logged as warnings and the peak is skipped.
+
+        kcat and kcat/Km computed from raw-area fits carry non-physical units
+        (area · µM⁻¹ · s⁻¹ and area · M⁻¹ · s⁻¹ respectively) until
+        apply_calibration() is called.
+
+        Returns:
+            The KineticAnalyzer instance, enabling method chaining.
+        """
         self.results.clear()
         for peak_id in self.df["peak_id"].unique():
             data = extract_peak_data(self.df, peak_id, self.reaction_time_seconds)
@@ -70,15 +171,23 @@ class KineticAnalyzer:
             s, v, v_sem, _ = data  # raw area not needed at fit stage
             try:
                 mm_fit = _select_and_fit(
-                    peak_id, s, v, v_sem, special_peaks=self.special_peaks,
+                    peak_id,
+                    s,
+                    v,
+                    v_sem,
+                    special_peaks=self.special_peaks,
                 )
                 lb_fit: FitResult | None = None
                 try:
                     lb_fit = fit_lineweaver_burk(s, v)
                 except Exception:
-                    pass
+                    _logger.warning("LB fit failed for %s", peak_id)
                 self.results[peak_id] = derive_constants(
-                    self.substrate,peak_id, mm_fit, self.enzyme_conc_um, lb_fit=lb_fit,
+                    self.substrate,
+                    peak_id,
+                    mm_fit,
+                    self.enzyme_conc_um,
+                    lb_fit=lb_fit,
                 )
                 _logger.success(f"✓ {peak_id}: Km={self.results[peak_id].fit.km}")
 
@@ -90,42 +199,52 @@ class KineticAnalyzer:
         self,
         cal: Calibration,
         *,
-        precise_sem: bool = True,  # FIX 4: user-selectable SEM scaling method
+        precise_sem: bool = True,
     ) -> Self:
-        """Re-fit all peaks using calibrated concentration velocities.
+        """Re-fits all peaks using calibrated µM/s velocities derived from a Calibration.
 
-        FIX 3: Calibration is now applied directly to the raw mean_signal
-        (peak area) before dividing by rxn_time, avoiding the fragile
-        reconstruction of area from velocity that existed in the original.
+        Converts raw mean peak area to µM concentration via the calibration curve,
+        then divides by reaction_time_seconds to produce velocity in µM/s. This
+        makes kcat (s⁻¹) and kcat/Km (M⁻¹·s⁻¹) physically meaningful for
+        comparison with literature values.
 
-        FIX 4: Two v_sem scaling modes are available:
-            precise_sem=True  (default): uses area_to_conc_with_error per
-                data point for full delta-method propagation including
-                slope_se and intercept_se contributions.
-            precise_sem=False: simplified approximation v_sem / slope,
-                appropriate when calibration uncertainty is negligible
-                compared to replicate variance.
+        Model selection respects self.special_peaks via _select_and_fit, so peaks
+        originally fitted as Hill models are re-fitted as Hill models after
+        calibration rather than defaulting to Michaelis-Menten.
 
-        This method rebuilds self.results from self.df on every call, making
-        it safe to call more than once (e.g., after updating the calibration).
+        Two SEM propagation modes are available. The precise mode (default) applies
+        the full delta-method per data point, propagating both slope and intercept
+        uncertainty from the calibration curve. The simplified mode divides v_sem
+        by the calibration slope only, which is appropriate when calibration
+        parameter uncertainty is negligible relative to replicate variance.
 
-        FIX 6: Warns if the calibration does not pass is_valid().
+        Rebuilds self.results from self.df on every call, making repeated calls safe
+        when the calibration is updated between calls.
 
         Args:
-            cal: A Calibration object produced by fit_calibration().
-            precise_sem: If True, use full delta-method SEM propagation
-                (recommended). If False, use the simplified slope-only
-                approximation.
+            cal: Fitted Calibration object produced by fit_calibration(). Must have
+                been fitted before passing; area_to_conc and area_to_conc_with_error
+                are called on each peak's mean signal array.
+            precise_sem: If True, applies full delta-method SEM propagation including
+                slope and intercept uncertainty from the calibration curve (recommended).
+                If False, uses the simplified approximation v_sem / slope. Defaults
+                to True.
 
         Returns:
-            self, for method chaining.
+            The KineticAnalyzer instance, enabling method chaining.
+
+        Note:
+            A warning is logged if cal.is_valid() returns False (R² below threshold
+            or non-positive slope), but fitting proceeds. Inspect calibration quality
+            before interpreting kcat and kcat/Km values.
         """
         # FIX 6: guard with calibration validity check
         if not cal.is_valid():
             _logger.warning(
                 "Calibration does not meet quality thresholds "
                 "(R²=%.4f, slope=%.4g). Results may be unreliable.",
-                cal.r_squared, cal.slope,
+                cal.r_squared,
+                cal.slope,
             )
 
         self.calibration = cal
@@ -140,16 +259,22 @@ class KineticAnalyzer:
             s, _v_raw, v_sem_raw, mean_signal = data
 
             # Convert area → µM concentration, then divide by rxn_time for velocity
-            v_um = np.asarray(cal.area_to_conc(mean_signal)) / self.reaction_time_seconds
+            v_um = (
+                    np.asarray(cal.area_to_conc(mean_signal)) / self.reaction_time_seconds
+            )
 
             # FIX 4: precise vs. simplified SEM scaling
             if precise_sem:
                 # Full delta-method per data point: propagates slope_se and intercept_se
                 v_sem_um = np.array(
                     [
-                        cal.area_to_conc_with_error(float(area), float(area_se * self.reaction_time_seconds))[1]
+                        cal.area_to_conc_with_error(
+                            float(area), float(area_se * self.reaction_time_seconds),
+                        )[1]
                         / self.reaction_time_seconds
-                        for area, area_se in zip(mean_signal, v_sem_raw * self.reaction_time_seconds)
+                        for area, area_se in zip(
+                        mean_signal, v_sem_raw * self.reaction_time_seconds,
+                    )
                     ],
                 )
             else:
@@ -157,9 +282,19 @@ class KineticAnalyzer:
                 v_sem_um = v_sem_raw / cal.slope
 
             try:
-                mm_fit = fit_michaelis_menten(s, v_um, sigma=v_sem_um)
+                mm_fit = _select_and_fit(
+                    peak_id,
+                    s,
+                    v_um,
+                    v_sem_um,
+                    special_peaks=self.special_peaks,
+                )
                 recalculated[peak_id] = derive_constants(
-                    peak_id, mm_fit, self.enzyme_conc_um, lb_fit=kc.lb_fit,
+                    self.substrate,
+                    peak_id,
+                    mm_fit,
+                    self.enzyme_conc_um,
+                    lb_fit=kc.lb_fit,
                 )
             except Exception as exc:
                 _logger.warning("Calibrated re-fit failed for %s: %s", peak_id, exc)
@@ -168,47 +303,85 @@ class KineticAnalyzer:
         return self
 
     def plot(self, dest: Path, *, overwrite: bool = False) -> Self:
+        """Generates and saves all kinetic plots for the current results.
+
+        Constructs a KineticPlots instance and renders the Michaelis-Menten curves,
+        Lineweaver-Burk plots, residual plots, and efficiency comparison panel to
+        dest. Plots are written to disk as a side effect.
+
+        Args:
+            dest: Base file path to use for writing plot files. A specific suffix
+                will be appended to the path stem to identify each particular
+                plot created.
+            overwrite: If True, overwrites existing plot files at dest. If False,
+                existing files are preserved and new files receive a unique suffix.
+                Defaults to False.
+
+        Returns:
+            The KineticAnalyzer instance, enabling method chaining.
+        """
         plotter = KineticPlots(
             dest,
             data=self.df,
             results=self.results,
             reaction_time_seconds=self.reaction_time_seconds,
             overwrite=overwrite,
+            calibrated=self.calibration is not None,
         )
         (
             plotter.plot()
             .plot_lineweaver_burk()
             .plot_residuals()
-            .plot_efficiency_comparison()
+            .plot_efficiency_comparison(exclude="OLV")
         )
         return self
 
     def to_dataframe(self) -> pd.DataFrame:
+        """Converts current results to a DataFrame with one row per peak."""
         return pd.DataFrame([kc.to_dict() for kc in self.results.values()])
 
     def export_csv(self, dest: Path, *, overwrite: bool = False) -> Self:
+        """Exports current kinetics results to a tagged CSV file.
+
+        Converts self.results to a DataFrame via to_dataframe() and writes it to
+        dest with a "kinetics" tag appended to the filename via PathBuilder. If
+        results are empty, logs a warning and returns without writing.
+
+        Args:
+            dest: Destination path for the CSV file. The final filename is
+                constructed by PathBuilder with a "kinetics" tag and ".csv" suffix.
+            overwrite: If True, overwrites an existing file at the resolved path.
+                If False, a unique suffix is appended to avoid collisions.
+                Defaults to False.
+
+        Returns:
+            The KineticAnalyzer instance, enabling method chaining.
+        """
         stats_df = self.to_dataframe()
         if stats_df.empty:
             _logger.warning("No kinetics data to export.")
             return self
 
-        out_path = PathBuilder.from_path(
-            dest,
-            suffix=".csv",
-            overwrite=overwrite,
-        ).with_tag("kinetics").path
+        out_path = (
+            PathBuilder.from_path(
+                dest,
+                suffix=".csv",
+                overwrite=overwrite,
+            )
+            .with_tag("kinetics")
+            .path
+        )
         stats_df.to_csv(out_path, index=False)
         _logger.info("Exported %s rows to %s", len(stats_df), out_path)
         return self
 
 
-# ---------------------------------------------------------------------------
-# Batch analysis helper
-# ---------------------------------------------------------------------------
-
-# Unsure of the utility of this function
+# ---------------------------------------------------------------------
+# Batch analysis helper - unsure of its utility given KineticAnalyzer
+# ---------------------------------------------------------------------
 
 def analyze_peaks(
+    substrate: str,
     substrate_conc: dict[str, np.ndarray],
     velocity: dict[str, np.ndarray],
     enzyme_conc_um: float,
@@ -217,6 +390,40 @@ def analyze_peaks(
     fit_lb: bool = True,
     min_points: int = 3,
 ) -> dict[str, KineticConstants]:
+    """Fits Michaelis-Menten models to pre-extracted substrate-velocity arrays.
+
+    Iterates over peak_ids present in substrate_conc, skipping any peak with
+    fewer than min_points data points or an all-zero velocity array. For each
+    qualifying peak, fits the Michaelis-Menten model and optionally a
+    Lineweaver-Burk cross-validation fit. Primary fit failures are logged as
+    warnings; Lineweaver-Burk failures are silently skipped.
+
+    kcat and kcat/Km computed from raw-area velocities carry non-physical units
+    until a calibration has been applied upstream by the caller.
+
+    Args:
+        substrate: Substrate name propagated to KineticConstants results.
+        substrate_conc: Mapping of peak_id to substrate concentration array in µM.
+        velocity: Mapping of peak_id to reaction velocity array (area/s before
+            calibration; µM/s after).
+        enzyme_conc_um: Total enzyme concentration in µM used to compute kcat.
+        velocity_std: Optional mapping of peak_id to per-point standard errors on
+            velocity in the same units as velocity. If absent for a peak, unweighted
+            fitting is used for that peak. Defaults to None.
+        fit_lb: If True, attempts a Lineweaver-Burk cross-validation fit for each
+            peak and stores it on the KineticConstants result. Defaults to True.
+        min_points: Minimum number of data points required to attempt fitting.
+            Peaks with fewer points are skipped. Defaults to 3.
+
+    Returns:
+        A mapping of peak_id to KineticConstants for all successfully fitted peaks.
+        Peaks that fail fitting or are skipped are absent from the result.
+
+    Note:
+        This function operates on pre-extracted arrays and does not integrate with
+        KineticAnalyzer's calibration workflow. For end-to-end analysis including
+        calibration, prefer KineticAnalyzer.
+    """
     results: dict[str, KineticConstants] = {}
     velocity_std = velocity_std or {}
 
@@ -236,7 +443,11 @@ def analyze_peaks(
                 except Exception:
                     pass
             results[peak_id] = derive_constants(
-                peak_id, mm_fit, enzyme_conc_um, lb_fit=lb_fit,
+                substrate,
+                peak_id,
+                mm_fit,
+                enzyme_conc_um,
+                lb_fit=lb_fit,
             )
         except Exception as exc:
             _logger.warning("Fit failed for %s: %s", peak_id, exc)

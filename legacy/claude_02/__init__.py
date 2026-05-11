@@ -1,5 +1,4 @@
-"""
-Enzyme Kinetics Analysis Package
+"""Enzyme Kinetics Analysis Package
 
 A comprehensive, reusable framework for analyzing enzyme kinetics from HPLC data.
 
@@ -26,32 +25,26 @@ from models import (
     LineweaverBurkModel,
     SubstrateInhibitionModel,
     KineticParameters,
-    EnzymeKineticModel
+    EnzymeKineticModel,
 )
 
-from calibration import (
-    CalibrationCurve,
-    CalibrationParameters
-)
+from calibration import CalibrationCurve, CalibrationParameters
 
-from analyzer import (
-    EnzymeKineticsAnalyzer,
-    EnzymeKineticsResult
-)
+from analyzer import EnzymeKineticsAnalyzer, EnzymeKineticsResult
 
 from plotting import KineticsPlotter
 
-__version__ = '1.0.0'
+__version__ = "1.0.0"
 
 __all__ = [
-    'MichaelisMentenModel',
-    'LineweaverBurkModel',
-    'SubstrateInhibitionModel',
-    'KineticParameters',
-    'EnzymeKineticModel',
-    'CalibrationCurve',
-    'CalibrationParameters',
-    'EnzymeKineticsAnalyzer',
-    'EnzymeKineticsResult',
-    'KineticsPlotter',
+    "MichaelisMentenModel",
+    "LineweaverBurkModel",
+    "SubstrateInhibitionModel",
+    "KineticParameters",
+    "EnzymeKineticModel",
+    "CalibrationCurve",
+    "CalibrationParameters",
+    "EnzymeKineticsAnalyzer",
+    "EnzymeKineticsResult",
+    "KineticsPlotter",
 ]

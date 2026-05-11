@@ -1,3 +1,24 @@
+"""Linear HPLC calibration curve fitting and concentration conversion utilities.
+
+Provides fit_calibration, the primary entry point for fitting a linear standard
+curve (peak area = slope × [CoA] + intercept) to HPLC calibration data. The
+fitted parameters are returned as a frozen Calibration dataclass that exposes
+area-to-concentration conversion with full delta-method error propagation,
+including intercept uncertainty.
+
+Assumes a linear detector response (Beer-Lambert regime) across the working
+concentration range. For typical CoA/HPLC calibrations R² ≥ 0.999 is expected;
+the is_valid() guard enforces this threshold before results are used downstream.
+
+Typical usage example:
+    >>> import numpy as np
+    >>> conc = np.array([0.0, 1.0, 5.0, 10.0, 25.0, 50.0])
+    >>> area = np.array([0.0, 120.3, 601.2, 1198.4, 3005.1, 5997.8])
+    >>> cal = fit_calibration(conc, area)
+    >>> print(cal.r_squared)
+    >>> conc_um, conc_se = cal.area_to_conc_with_error(1200.0, 15.0)
+"""
+
 from __future__ import annotations
 
 import json
@@ -11,28 +32,34 @@ from scipy.optimize import curve_fit
 
 from .models import r_squared
 
+__all__ = ["Calibration", "fit_calibration", "load_calibration", "plot_calibration", "save_calibration"]
+
 _logger = RichLogAdapter(component=__name__)
 
 
-# ---------------------------------------------------------------------------
+# ---------------------------------------------------------------------
 # Calibration — linear standard curve
-# FIX 2, FIX 6
-# ---------------------------------------------------------------------------
+# ---------------------------------------------------------------------
+
 
 @dataclass(frozen=True, slots=True)
 class Calibration:
-    """Linear HPLC calibration curve (peak area = slope × [CoA] + intercept).
+    """Linear HPLC calibration curve parameters and conversion methods.
 
     Assumes a linear detector response (Beer-Lambert regime). Fit via
     curve_fit with optional sigma weighting.
 
     Attributes:
-        slope: Calibration slope (area / µM).
-        slope_se: Standard error of slope.
+        slope: Calibration slope in area/µM.
+        slope_se: Standard error of slope in area/µM.
         intercept: Calibration intercept (area at zero concentration).
-        intercept_se: Standard error of intercept.
-        r_squared: Coefficient of determination; ≥ 0.999 expected for HPLC.
-        conc_range: (min, max) concentration of calibration standards in µM.
+        intercept_se: Standard error of intercept in area units.
+        r_squared: Coefficient of determination (dimensionless); ≥ 0.999
+            expected for HPLC CoA calibrations.
+        rmse: Root mean square error of the fit in area units.
+        n_points: Number of calibration standards used in the fit.
+        conc_range: Minimum and maximum concentration of calibration
+            standards in µM as a (min, max) tuple.
     """
 
     slope: float
@@ -45,32 +72,48 @@ class Calibration:
     conc_range: tuple[float, float]
 
     def __str__(self) -> str:
-        return (f"Slope={self.slope:.6f}±{self.slope_se:.6f} area/µM | "
-                f"Intercept={self.intercept:.6f}±{self.intercept_se:.6f} | "
-                f"R²={self.r_squared:.6f} | "
-                f"RMSE={self.rmse:.4f}")
+        """Formats the calibration parameters as a compact summary string."""
+        return (
+            f"Slope={self.slope:.6f}±{self.slope_se:.6f} area/µM | "
+            f"Intercept={self.intercept:.6f}±{self.intercept_se:.6f} | "
+            f"R²={self.r_squared:.6f} | "
+            f"RMSE={self.rmse:.4f}"
+        )
 
-    # FIX 6: restore is_valid() guard from original CalibrationCurve
     def is_valid(self, r2_threshold: float = 0.999) -> bool:
-        """Return True if the calibration meets quality thresholds.
+        """Checks whether the calibration meets minimum quality thresholds.
 
-        Requires slope > 0 (positive detector response) and R² ≥ r2_threshold.
-        The default threshold is 0.999, consistent with typical CoA/HPLC
-        calibrations; the original codebase used 0.95, which is retained as
-        an acceptable lower bound via the keyword argument.
+        Requires a positive slope (monotonically increasing detector response)
+        and R² at or above r2_threshold.
 
         Args:
-            r2_threshold: Minimum acceptable R². Defaults to 0.999.
+            r2_threshold: Minimum acceptable R² value. Defaults to 0.999.
 
         Returns:
-            True if slope > 0 and r_squared ≥ r2_threshold.
+            True if slope > 0 and r_squared ≥ r2_threshold, False otherwise.
         """
         return self.slope > 0 and self.r_squared >= r2_threshold
 
     def area_to_conc(self, area: np.ndarray | float) -> np.ndarray | float:
+        """Converts peak area to concentration using the fitted calibration curve.
+
+        Args:
+            area: Measured peak area or array of peak areas in area units.
+
+        Returns:
+            Concentration in µM corresponding to the input area value(s).
+        """
         return (area - self.intercept) / self.slope
 
     def conc_to_area(self, conc: np.ndarray | float) -> np.ndarray | float:
+        """Converts concentration to expected peak area using the fitted calibration curve.
+
+        Args:
+            conc: Concentration in µM or array of concentrations in µM.
+
+        Returns:
+            Expected peak area in area units corresponding to the input concentration(s).
+        """
         return self.slope * conc + self.intercept
 
     def area_to_conc_with_error(
@@ -78,24 +121,25 @@ class Calibration:
         area: float,
         area_se: float,
     ) -> tuple[float, float]:
-        """Convert a single area measurement to concentration with propagated error.
+        """Converts a single area measurement to concentration with propagated uncertainty.
 
-        Uses the full delta method, including intercept uncertainty (FIX 2):
+        Applies the full delta method to propagate area measurement uncertainty,
+        calibration slope uncertainty, and calibration intercept uncertainty into
+        the concentration standard error:
 
             σ_C² = (σ_area / slope)²
                  + ((area − intercept) · σ_slope / slope²)²
                  + (σ_intercept / slope)²
 
-        The intercept term was omitted in the original codebase. For well-behaved
-        calibrations (intercept ≈ 0) the contribution is negligible, but it is
-        included here for completeness.
+        The intercept uncertainty term is small for well-behaved calibrations
+        where intercept ≈ 0, but is included for completeness.
 
         Args:
-            area: Measured peak area.
-            area_se: Standard error of the area measurement.
+            area: Measured peak area in area units.
+            area_se: Standard error of the area measurement in area units.
 
         Returns:
-            Tuple of (concentration in µM, concentration SE in µM).
+            A tuple of (concentration in µM, concentration SE in µM).
         """
         conc = float(self.area_to_conc(area))
         dc_da = 1.0 / self.slope
@@ -111,9 +155,9 @@ class Calibration:
         return conc, conc_se
 
 
-# ---------------------------------------------------------------------------
+# ---------------------------------------------------------------------
 # Fitting — thin wrappers around curve_fit
-# ---------------------------------------------------------------------------
+# ---------------------------------------------------------------------
 
 
 def fit_calibration(
@@ -122,13 +166,39 @@ def fit_calibration(
     *,
     sigma: np.ndarray | None = None,
 ) -> Calibration:
+    """Fits a linear calibration curve to HPLC standard data.
+
+    Fits the model peak_area = slope × [CoA] + intercept using
+    scipy.optimize.curve_fit with absolute_sigma=True. When sigma is provided
+    and contains non-zero values, weighted least squares is used; otherwise
+    fitting reduces to OLS.
+
+    Args:
+        concentrations: Known CoA concentrations of calibration standards in µM.
+        peak_areas: Measured HPLC peak areas corresponding to each standard
+            in area units.
+        sigma: Optional per-point standard errors on peak_areas in area units.
+            If None or all-zero, unweighted fitting is used. Defaults to None.
+
+    Returns:
+        A fitted Calibration instance with slope, intercept, their standard
+        errors, R², RMSE in area units, n_points, and conc_range in µM.
+
+    Raises:
+        RuntimeError: If curve_fit fails to converge.
+        ValueError: If concentrations and peak_areas have incompatible shapes.
+    """
+
     def _linear(x: np.ndarray, slope: float, intercept: float) -> np.ndarray:
         return slope * x + intercept
 
     effective_sigma = sigma if sigma is not None and np.any(sigma > 0) else None
     popt, pcov = curve_fit(
-        _linear, concentrations, peak_areas,
-        sigma=effective_sigma, absolute_sigma=True,
+        _linear,
+        concentrations,
+        peak_areas,
+        sigma=effective_sigma,
+        absolute_sigma=True,
     )
     perr = np.sqrt(np.diag(pcov))
     predicted = _linear(concentrations, *popt)
@@ -144,12 +214,28 @@ def fit_calibration(
     )
 
 
-# ---------------------------------------------------------------------------
+# ---------------------------------------------------------------------
 # Legacy
-# ---------------------------------------------------------------------------
+# ---------------------------------------------------------------------
 
 
 def save_calibration(cal: Calibration, path: Path, nice: bool = False) -> None:
+    """Saves calibration parameters to a file in JSON or human-readable format.
+
+    Two output modes are available. When nice is False (default), writes a
+    compact JSON file containing slope, slope_se, intercept, intercept_se,
+    r_squared, rmse, n_points, and conc_range. When nice is True, writes a
+    formatted plain-text report including the fitted model equation, all
+    parameters with units, RMSE, n_points, the inverse function, and a Python
+    code snippet for embedding the calibration constants.
+
+    Args:
+        cal: Fitted Calibration instance to serialize.
+        path: Destination file path. The file is created or overwritten.
+        nice: If True, writes a human-readable plain-text report. If False,
+            writes a compact JSON file suitable for machine consumption.
+            Defaults to False.
+    """
     if not nice:
         data = {
             "slope": cal.slope,
@@ -157,13 +243,14 @@ def save_calibration(cal: Calibration, path: Path, nice: bool = False) -> None:
             "intercept": cal.intercept,
             "intercept_se": cal.intercept_se,
             "r_squared": cal.r_squared,
+            "rmse": cal.rmse,
+            "n_points": cal.n_points,
             "conc_range": list(cal.conc_range),
         }
         path.write_text(json.dumps(data, indent=2))
 
     if nice:
-
-        with open(path, 'w') as f:
+        with open(path, "w") as f:
             f.write("=" * 80 + "\n")
             f.write("HPLC CALIBRATION PARAMETERS\n")
             f.write("=" * 80 + "\n\n")
@@ -173,14 +260,20 @@ def save_calibration(cal: Calibration, path: Path, nice: bool = False) -> None:
 
             f.write("PARAMETERS:\n")
             f.write(f"  Slope:        {cal.slope:.10f} ± {cal.slope_se:.10f} area/µM\n")
-            f.write(f"  Intercept:    {cal.intercept:.10f} ± {cal.intercept_se:.10f} area\n")
+            f.write(
+                f"  Intercept:    {cal.intercept:.10f} ± {cal.intercept_se:.10f} area\n",
+            )
             f.write(f"  R²:           {cal.r_squared:.10f}\n")
             f.write(f"  RMSE:         {cal.rmse:.6f} area\n")
             f.write(f"  N points:     {cal.n_points}\n")
-            f.write(f"  Conc range:   {cal.conc_range[0]:.2f}–{cal.conc_range[1]:.2f} µM\n\n")
+            f.write(
+                f"  Conc range:   {cal.conc_range[0]:.2f}–{cal.conc_range[1]:.2f} µM\n\n",
+            )
 
             f.write("INVERSE FUNCTION:\n")
-            f.write(f"  [concentration] = (peak_area - {cal.intercept:.10f}) / {cal.slope:.10f}\n\n")
+            f.write(
+                f"  [concentration] = (peak_area - {cal.intercept:.10f}) / {cal.slope:.10f}\n\n",
+            )
 
             f.write("PYTHON CODE:\n")
             f.write("```python\n")
@@ -193,6 +286,7 @@ def save_calibration(cal: Calibration, path: Path, nice: bool = False) -> None:
 
 
 def load_calibration(path: Path) -> Calibration:
+    """Loads a Calibration instance from a JSON file written by save_calibration."""
     data = json.loads(path.read_text())
     return Calibration(
         slope=data["slope"],
@@ -200,6 +294,8 @@ def load_calibration(path: Path) -> Calibration:
         intercept=data["intercept"],
         intercept_se=data["intercept_se"],
         r_squared=data["r_squared"],
+        rmse=data["rmse"],
+        n_points=data["n_points"],
         conc_range=tuple(data["conc_range"]),
     )
 
@@ -212,6 +308,24 @@ def plot_calibration(
     output_path: Path | None = None,
     show: bool = False,
 ) -> None:
+    """Generates a three-panel diagnostic plot for a fitted calibration curve.
+
+    Renders the following panels side by side:
+    1. Calibration curve — scatter of standards with fitted line, slope, and R².
+    2. Absolute residuals — raw residuals (area units) vs. concentration.
+    3. Standardized residuals — residuals normalized by their standard deviation,
+       with ±3σ reference lines.
+
+    Args:
+        cal: Fitted Calibration instance providing the model parameters.
+        concentrations: Known CoA concentrations of calibration standards in µM.
+        peak_areas: Measured HPLC peak areas corresponding to each standard
+            in area units.
+        output_path: Optional file path to save the figure. If provided, the
+            figure is saved at 300 dpi as a side effect. Defaults to None.
+        show: If True, calls plt.show() to display the figure interactively.
+            Defaults to False.
+    """
     predicted = cal.conc_to_area(concentrations)
     residuals = peak_areas - predicted
     std_res = residuals / np.std(residuals) if np.std(residuals) > 0 else residuals
@@ -220,10 +334,15 @@ def plot_calibration(
     ax_fit, ax_res, ax_std = axes
 
     # Panel 1 — calibration curve + fit
-    ax_fit.scatter(concentrations, peak_areas, color="steelblue", zorder=3, label="Standards")
+    ax_fit.scatter(
+        concentrations, peak_areas, color="steelblue", zorder=3, label="Standards",
+    )
     c_line = np.linspace(concentrations.min(), concentrations.max(), 200)
     ax_fit.plot(
-        c_line, cal.conc_to_area(c_line), "--", color="red",
+        c_line,
+        cal.conc_to_area(c_line),
+        "--",
+        color="red",
         label=f"slope={cal.slope:.4g}, R²={cal.r_squared:.4f}",
     )
     ax_fit.set_xlabel("[CoA] (µM)")

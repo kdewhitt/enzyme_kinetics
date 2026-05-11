@@ -1,0 +1,11 @@
+# ruff.toml
+
+# Completely ignore these everywhere
+exclude = [
+    ".venv",
+    "build",
+    "dist",
+    "tests",
+    "legacy",
+]
+

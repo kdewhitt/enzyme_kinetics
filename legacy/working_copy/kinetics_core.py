@@ -2,7 +2,8 @@ from __future__ import annotations
 
 import logging
 from dataclasses import dataclass, field
-from typing import Any, Callable
+from typing import Any
+from collections.abc import Callable
 
 import numpy as np
 from scipy.optimize import curve_fit
@@ -10,33 +11,37 @@ from scipy.optimize import curve_fit
 _logger = logging.getLogger(__name__)
 
 
-# ---------------------------------------------------------------------------
+# ---------------------------------------------------------------------
 # Pure model functions — no classes, no state
-# ---------------------------------------------------------------------------
+# ---------------------------------------------------------------------
+
 
 def michaelis_menten(s: np.ndarray, vmax: float, km: float) -> np.ndarray:
     return (vmax * s) / (km + s)
 
 
 def hill_equation(s: np.ndarray, vmax: float, k_half: float, n: float) -> np.ndarray:
-    return (vmax * s ** n) / (k_half ** n + s ** n)
+    return (vmax * s**n) / (k_half**n + s**n)
 
 
-def substrate_inhibition(s: np.ndarray, vmax: float, km: float, ki: float) -> np.ndarray:
-    return (vmax * s) / (km + s + (s ** 2) / ki)
+def substrate_inhibition(
+    s: np.ndarray, vmax: float, km: float, ki: float
+) -> np.ndarray:
+    return (vmax * s) / (km + s + (s**2) / ki)
 
 
 def lineweaver_burk_transform(
-        s: np.ndarray,
-        v: np.ndarray,
+    s: np.ndarray,
+    v: np.ndarray,
 ) -> tuple[np.ndarray, np.ndarray]:
     mask = (s > 0) & (v > 0)
     return 1.0 / s[mask], 1.0 / v[mask]
 
 
-# ---------------------------------------------------------------------------
+# ---------------------------------------------------------------------
 # Fit result — frozen, model-agnostic
-# ---------------------------------------------------------------------------
+# ---------------------------------------------------------------------
+
 
 @dataclass(frozen=True, slots=True)
 class FitResult:
@@ -75,23 +80,26 @@ def _r_squared(observed: np.ndarray, predicted: np.ndarray) -> float:
     return 1.0 - ss_res / ss_tot
 
 
-# ---------------------------------------------------------------------------
+# ---------------------------------------------------------------------
 # Fitting — thin wrappers around curve_fit
-# ---------------------------------------------------------------------------
+# ---------------------------------------------------------------------
+
 
 def fit_model(
-        model_func: Callable[..., np.ndarray],
-        s: np.ndarray,
-        v: np.ndarray,
-        p0: list[float],
-        *,
-        sigma: np.ndarray | None = None,
-        bounds: tuple = (0, np.inf),
-        maxfev: int = 10_000,
+    model_func: Callable[..., np.ndarray],
+    s: np.ndarray,
+    v: np.ndarray,
+    p0: list[float],
+    *,
+    sigma: np.ndarray | None = None,
+    bounds: tuple = (0, np.inf),
+    maxfev: int = 10_000,
 ) -> FitResult:
     effective_sigma = sigma if sigma is not None and np.any(sigma > 0) else None
     popt, pcov = curve_fit(
-        model_func, s, v,
+        model_func,
+        s,
+        v,
         p0=p0,
         sigma=effective_sigma,
         absolute_sigma=True,
@@ -110,12 +118,12 @@ def fit_model(
 
 
 def fit_michaelis_menten(
-        s: np.ndarray,
-        v: np.ndarray,
-        *,
-        sigma: np.ndarray | None = None,
-        vmax_init: float | None = None,
-        km_init: float | None = None,
+    s: np.ndarray,
+    v: np.ndarray,
+    *,
+    sigma: np.ndarray | None = None,
+    vmax_init: float | None = None,
+    km_init: float | None = None,
 ) -> FitResult:
     vmax_guess = vmax_init if vmax_init is not None else float(np.max(v))
     km_guess = km_init if km_init is not None else float(np.median(s))
@@ -123,34 +131,34 @@ def fit_michaelis_menten(
 
 
 def fit_hill(
-        s: np.ndarray,
-        v: np.ndarray,
-        *,
-        sigma: np.ndarray | None = None,
+    s: np.ndarray,
+    v: np.ndarray,
+    *,
+    sigma: np.ndarray | None = None,
 ) -> FitResult:
     p0 = [float(np.max(v)), float(np.median(s)), 2.0]
     return fit_model(hill_equation, s, v, p0, sigma=sigma)
 
 
 def fit_substrate_inhibition(
-        s: np.ndarray,
-        v: np.ndarray,
-        *,
-        sigma: np.ndarray | None = None,
+    s: np.ndarray,
+    v: np.ndarray,
+    *,
+    sigma: np.ndarray | None = None,
 ) -> FitResult:
     p0 = [float(np.max(v)), float(np.median(s)), float(np.max(s))]
     return fit_model(substrate_inhibition, s, v, p0, sigma=sigma)
 
 
 def fit_lineweaver_burk(
-        s: np.ndarray,
-        v: np.ndarray,
+    s: np.ndarray,
+    v: np.ndarray,
 ) -> FitResult:
     from scipy.stats import linregress
 
     s_inv, v_inv = lineweaver_burk_transform(s, v)
     slope, intercept, r_value, _, std_err = linregress(s_inv, v_inv)
-    r2 = r_value ** 2
+    r2 = r_value**2
     vmax = 1.0 / intercept if intercept != 0 else np.nan
     km = slope * vmax if not np.isnan(vmax) else np.nan
     return FitResult(
@@ -163,9 +171,10 @@ def fit_lineweaver_burk(
     )
 
 
-# ---------------------------------------------------------------------------
+# ---------------------------------------------------------------------
 # Derived kinetic constants
-# ---------------------------------------------------------------------------
+# ---------------------------------------------------------------------
+
 
 @dataclass(frozen=True, slots=True)
 class KineticConstants:
@@ -201,11 +210,11 @@ class KineticConstants:
 
 
 def derive_constants(
-        peak_id: str,
-        fit: FitResult,
-        enzyme_conc_um: float,
-        *,
-        lb_fit: FitResult | None = None,
+    peak_id: str,
+    fit: FitResult,
+    enzyme_conc_um: float,
+    *,
+    lb_fit: FitResult | None = None,
 ) -> KineticConstants:
     kcat = fit.vmax / enzyme_conc_um
     kcat_se = fit.vmax_se / enzyme_conc_um
@@ -213,7 +222,7 @@ def derive_constants(
         kcat_km = kcat / fit.km
         rel_kcat = kcat_se / kcat
         rel_km = fit.km_se / fit.km
-        kcat_km_se = kcat_km * np.sqrt(rel_kcat ** 2 + rel_km ** 2)
+        kcat_km_se = kcat_km * np.sqrt(rel_kcat**2 + rel_km**2)
     else:
         kcat_km = np.nan
         kcat_km_se = np.nan
@@ -228,9 +237,10 @@ def derive_constants(
     )
 
 
-# ---------------------------------------------------------------------------
+# ---------------------------------------------------------------------
 # Calibration — linear standard curve
-# ---------------------------------------------------------------------------
+# ---------------------------------------------------------------------
+
 
 @dataclass(frozen=True, slots=True)
 class Calibration:
@@ -248,28 +258,33 @@ class Calibration:
         return self.slope * conc + self.intercept
 
     def area_to_conc_with_error(
-            self, area: float, area_se: float,
+        self,
+        area: float,
+        area_se: float,
     ) -> tuple[float, float]:
         conc = float(self.area_to_conc(area))
         dc_da = 1.0 / self.slope
-        dc_ds = -(area - self.intercept) / (self.slope ** 2)
+        dc_ds = -(area - self.intercept) / (self.slope**2)
         conc_se = float(np.sqrt((dc_da * area_se) ** 2 + (dc_ds * self.slope_se) ** 2))
         return conc, conc_se
 
 
 def fit_calibration(
-        concentrations: np.ndarray,
-        peak_areas: np.ndarray,
-        *,
-        sigma: np.ndarray | None = None,
+    concentrations: np.ndarray,
+    peak_areas: np.ndarray,
+    *,
+    sigma: np.ndarray | None = None,
 ) -> Calibration:
     def _linear(x: np.ndarray, slope: float, intercept: float) -> np.ndarray:
         return slope * x + intercept
 
     effective_sigma = sigma if sigma is not None and np.any(sigma > 0) else None
     popt, pcov = curve_fit(
-        _linear, concentrations, peak_areas,
-        sigma=effective_sigma, absolute_sigma=True,
+        _linear,
+        concentrations,
+        peak_areas,
+        sigma=effective_sigma,
+        absolute_sigma=True,
     )
     perr = np.sqrt(np.diag(pcov))
     predicted = _linear(concentrations, *popt)
@@ -283,34 +298,36 @@ def fit_calibration(
     )
 
 
-# ---------------------------------------------------------------------------
+# ---------------------------------------------------------------------
 # Velocity preparation from summary-statistics DataFrames
-# ---------------------------------------------------------------------------
+# ---------------------------------------------------------------------
+
 
 def prepare_velocity(
-        s: np.ndarray,
-        mean_signal: np.ndarray,
-        std_signal: np.ndarray,
-        counts: np.ndarray,
-        rxn_time: float,
+    s: np.ndarray,
+    mean_signal: np.ndarray,
+    std_signal: np.ndarray,
+    counts: np.ndarray,
+    rxn_time: float,
 ) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
     v = mean_signal / rxn_time
     v_sem = (std_signal / rxn_time) / np.sqrt(counts)
     return s, v, v_sem
 
 
-# ---------------------------------------------------------------------------
+# ---------------------------------------------------------------------
 # Batch analysis helper
-# ---------------------------------------------------------------------------
+# ---------------------------------------------------------------------
+
 
 def analyze_peaks(
-        substrate_conc: dict[str, np.ndarray],
-        velocity: dict[str, np.ndarray],
-        enzyme_conc_um: float,
-        *,
-        velocity_std: dict[str, np.ndarray] | None = None,
-        fit_lb: bool = True,
-        min_points: int = 3,
+    substrate_conc: dict[str, np.ndarray],
+    velocity: dict[str, np.ndarray],
+    enzyme_conc_um: float,
+    *,
+    velocity_std: dict[str, np.ndarray] | None = None,
+    fit_lb: bool = True,
+    min_points: int = 3,
 ) -> dict[str, KineticConstants]:
     results: dict[str, KineticConstants] = {}
     velocity_std = velocity_std or {}
@@ -331,7 +348,10 @@ def analyze_peaks(
                 except Exception:
                     pass
             results[peak_id] = derive_constants(
-                peak_id, mm_fit, enzyme_conc_um, lb_fit=lb_fit,
+                peak_id,
+                mm_fit,
+                enzyme_conc_um,
+                lb_fit=lb_fit,
             )
         except Exception as exc:
             _logger.warning("Fit failed for %s: %s", peak_id, exc)

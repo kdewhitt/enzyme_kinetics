@@ -10,7 +10,14 @@ import numpy as np
 import pandas as pd
 
 from kgdlibs.pathtools import ExportPathBuilder, to_absolute_path
-from plots.config import COUNT, MEAN, PEAK_ID, PROTEIN, REL_ACT, STD, filter_stats_params
+from plots.config import (
+    COUNT,
+    MEAN,
+    PEAK_ID,
+    REL_ACT,
+    STD,
+    filter_stats_params,
+)
 from process.analyze import COLUMN_NAME_MAP, normalize_peak_id
 from process.compounds import COMPOUND_PREFIXES
 from process.io import read_csv_peaks
@@ -24,10 +31,7 @@ from kinetics_core import (
     fit_michaelis_menten,
     fit_hill,
     fit_lineweaver_burk,
-    michaelis_menten,
-    hill_equation,
     prepare_velocity,
-    fit_calibration,
     lineweaver_burk_transform,
 )
 
@@ -36,9 +40,10 @@ _logger = logging.getLogger(__name__)
 SUBSTRATE_CONC: Final[str] = "substrate_conc"
 
 
-# ---------------------------------------------------------------------------
+# ---------------------------------------------------------------------
 # Config — data loading and export paths
-# ---------------------------------------------------------------------------
+# ---------------------------------------------------------------------
+
 
 @dataclass(frozen=True, slots=True)
 class KineticsConfig:
@@ -56,7 +61,9 @@ class KineticsConfig:
         object.__setattr__(self, "peak_prefix", prefixes)
 
     def load(self, path: Path, **kwargs: Any) -> pd.DataFrame:
-        df = read_csv_peaks(path, convert_to_float32=False, verbose=self.verbose, **kwargs)
+        df = read_csv_peaks(
+            path, convert_to_float32=False, verbose=self.verbose, **kwargs
+        )
         df.rename(columns=COLUMN_NAME_MAP, inplace=True)
         df = filter_stats_params(df, self.peak_attr)
         require_columns(df, (SUBSTRATE_CONC, PEAK_ID, MEAN, STD, COUNT, REL_ACT))
@@ -67,7 +74,9 @@ class KineticsConfig:
     def build_export_path(self, dest: Path, tag: str) -> Path:
         base_name = f"{tag}_kinetics_{self.peak_attr}.png"
         build_path = ExportPathBuilder(
-            base_name, overwrite=self.overwrite, merge=self.merge,
+            base_name,
+            overwrite=self.overwrite,
+            merge=self.merge,
         ).build(dest)
         return build_path.path
 
@@ -77,10 +86,11 @@ class KineticsConfig:
         return cls(**{k: v for k, v in data.items() if k in valid_keys})
 
 
-# ---------------------------------------------------------------------------
+# ---------------------------------------------------------------------
 # Per-peak data extraction
 # FIX 3: unpack four values from prepare_velocity (now returns mean_signal too)
-# ---------------------------------------------------------------------------
+# ---------------------------------------------------------------------
+
 
 def _extract_peak_data(
     df: pd.DataFrame,
@@ -113,9 +123,10 @@ def _extract_peak_data(
     )
 
 
-# ---------------------------------------------------------------------------
+# ---------------------------------------------------------------------
 # Model selection strategy
-# ---------------------------------------------------------------------------
+# ---------------------------------------------------------------------
+
 
 def _select_and_fit(
     peak_id: str,
@@ -131,9 +142,10 @@ def _select_and_fit(
     return fit_michaelis_menten(s, v, sigma=v_sem)
 
 
-# ---------------------------------------------------------------------------
+# ---------------------------------------------------------------------
 # Orchestrator
-# ---------------------------------------------------------------------------
+# ---------------------------------------------------------------------
+
 
 class EnzymeKineticsAnalysis:
     def __init__(
@@ -168,7 +180,11 @@ class EnzymeKineticsAnalysis:
             s, v, v_sem, _ = data  # raw area not needed at fit stage
             try:
                 mm_fit = _select_and_fit(
-                    peak_id, s, v, v_sem, special_peaks=self.special_peaks,
+                    peak_id,
+                    s,
+                    v,
+                    v_sem,
+                    special_peaks=self.special_peaks,
                 )
                 lb_fit: FitResult | None = None
                 try:
@@ -176,7 +192,10 @@ class EnzymeKineticsAnalysis:
                 except Exception:
                     pass
                 self.results[peak_id] = derive_constants(
-                    peak_id, mm_fit, self.config.prot_conc, lb_fit=lb_fit,
+                    peak_id,
+                    mm_fit,
+                    self.config.prot_conc,
+                    lb_fit=lb_fit,
                 )
             except Exception as exc:
                 _logger.warning("Fit failed for %s: %s", peak_id, exc)
@@ -221,7 +240,8 @@ class EnzymeKineticsAnalysis:
             _logger.warning(
                 "Calibration does not meet quality thresholds "
                 "(R²=%.4f, slope=%.4g). Results may be unreliable.",
-                cal.r_squared, cal.slope,
+                cal.r_squared,
+                cal.slope,
             )
 
         self.calibration = cal
@@ -243,9 +263,13 @@ class EnzymeKineticsAnalysis:
                 # Full delta-method per data point: propagates slope_se and intercept_se
                 v_sem_um = np.array(
                     [
-                        cal.area_to_conc_with_error(float(area), float(area_se * self.config.rxn_time))[1]
+                        cal.area_to_conc_with_error(
+                            float(area), float(area_se * self.config.rxn_time)
+                        )[1]
                         / self.config.rxn_time
-                        for area, area_se in zip(mean_signal, v_sem_raw * self.config.rxn_time)
+                        for area, area_se in zip(
+                            mean_signal, v_sem_raw * self.config.rxn_time
+                        )
                     ],
                 )
             else:
@@ -255,7 +279,10 @@ class EnzymeKineticsAnalysis:
             try:
                 mm_fit = fit_michaelis_menten(s, v_um, sigma=v_sem_um)
                 recalculated[peak_id] = derive_constants(
-                    peak_id, mm_fit, self.config.prot_conc, lb_fit=kc.lb_fit,
+                    peak_id,
+                    mm_fit,
+                    self.config.prot_conc,
+                    lb_fit=kc.lb_fit,
                 )
             except Exception as exc:
                 _logger.warning("Calibrated re-fit failed for %s: %s", peak_id, exc)
@@ -302,8 +329,14 @@ class EnzymeKineticsAnalysis:
 
             s, v, v_sem, _ = data
             ax.errorbar(
-                s, v, yerr=v_sem,
-                fmt="o", color="steelblue", alpha=0.7, capsize=3, label="Data",
+                s,
+                v,
+                yerr=v_sem,
+                fmt="o",
+                color="steelblue",
+                alpha=0.7,
+                capsize=3,
+                label="Data",
             )
 
             s_fit = np.linspace(0, np.max(s) * 1.1, 200)
@@ -372,14 +405,19 @@ class EnzymeKineticsAnalysis:
             s, v, _, _ = data
             s_inv, v_inv = lineweaver_burk_transform(s, v)
 
-            ax.scatter(s_inv, v_inv, color="steelblue", zorder=3, label="Data (1/v vs 1/[S])")
+            ax.scatter(
+                s_inv, v_inv, color="steelblue", zorder=3, label="Data (1/v vs 1/[S])"
+            )
 
             # Fit line over observed 1/[S] range
             x_line = np.linspace(s_inv.min(), s_inv.max(), 200)
             slope = lb.extra["slope"]
             intercept = lb.extra["intercept"]
             ax.plot(
-                x_line, slope * x_line + intercept, "--", color="red",
+                x_line,
+                slope * x_line + intercept,
+                "--",
+                color="red",
                 label=f"R²={lb.r_squared:.4f}",
             )
 
@@ -387,15 +425,21 @@ class EnzymeKineticsAnalysis:
             if not np.isnan(lb.vmax) and intercept != 0:
                 ax.axhline(intercept, color="grey", lw=0.8, ls=":")
                 ax.annotate(
-                    f"1/Vmax={intercept:.3g}", xy=(s_inv.min(), intercept),
-                    fontsize=7, color="grey", va="bottom",
+                    f"1/Vmax={intercept:.3g}",
+                    xy=(s_inv.min(), intercept),
+                    fontsize=7,
+                    color="grey",
+                    va="bottom",
                 )
             if not np.isnan(lb.km) and slope != 0:
                 x_int = -intercept / slope
                 ax.axvline(x_int, color="orange", lw=0.8, ls=":")
                 ax.annotate(
-                    f"−1/Km={x_int:.3g}", xy=(x_int, v_inv.min()),
-                    fontsize=7, color="orange", ha="right",
+                    f"−1/Km={x_int:.3g}",
+                    xy=(x_int, v_inv.min()),
+                    fontsize=7,
+                    color="orange",
+                    ha="right",
                 )
 
             ax.set_title(peak_id, fontweight="bold")
@@ -453,8 +497,13 @@ class EnzymeKineticsAnalysis:
 
             ax.axhline(0, color="black", lw=0.8, ls="--")
             ax.errorbar(
-                s, residuals, yerr=v_sem, fmt="o", color="steelblue",
-                alpha=0.7, capsize=3,
+                s,
+                residuals,
+                yerr=v_sem,
+                fmt="o",
+                color="steelblue",
+                alpha=0.7,
+                capsize=3,
             )
             ax.set_title(peak_id, fontweight="bold")
             ax.set_xlabel("[S] (µM)")
@@ -509,7 +558,9 @@ class EnzymeKineticsAnalysis:
         fig, axes = plt.subplots(2, 2, figsize=(12, 8))
         ax_km, ax_vmax, ax_kcat, ax_kcat_km = axes.flatten()
 
-        def _bar(ax: plt.Axes, vals: list[float], errs: list[float], title: str, ylabel: str) -> None:
+        def _bar(
+            ax: plt.Axes, vals: list[float], errs: list[float], title: str, ylabel: str
+        ) -> None:
             colors = ["steelblue" if not np.isnan(v) else "lightgrey" for v in vals]
             safe_errs = [e if not np.isnan(e) else 0.0 for e in errs]
             safe_vals = [v if not np.isnan(v) else 0.0 for v in vals]
@@ -520,9 +571,14 @@ class EnzymeKineticsAnalysis:
             ax.set_ylabel(ylabel)
             if all(np.isnan(v) for v in vals):
                 ax.text(
-                    0.5, 0.5, "No data\n(calibration required?)",
-                    transform=ax.transAxes, ha="center", va="center",
-                    color="grey", fontsize=10,
+                    0.5,
+                    0.5,
+                    "No data\n(calibration required?)",
+                    transform=ax.transAxes,
+                    ha="center",
+                    va="center",
+                    color="grey",
+                    fontsize=10,
                 )
 
         _bar(ax_km, km_vals, km_errs, "Km", "Km (µM)")
@@ -545,7 +601,8 @@ class EnzymeKineticsAnalysis:
             _logger.warning("No kinetics data to export.")
             return self
         csv_path = self.config.build_export_path(
-            self.dest, tag=self.path.stem,
+            self.dest,
+            tag=self.path.stem,
         ).with_suffix(".csv")
         stats_df.to_csv(csv_path, index=False)
         _logger.info("Exported %s rows to %s", len(stats_df), csv_path)

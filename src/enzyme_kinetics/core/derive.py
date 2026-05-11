@@ -1,3 +1,24 @@
+"""Utilities for computing kcat and kcat/Km from kinetic fit results.
+
+Provides derive_constants, the primary entry point for computing turnover number
+(kcat) and catalytic efficiency (kcat/Km) from a FitResult produced by any
+MM-family fitting function. Uncertainty propagation uses the full Vmax–Km
+covariance matrix via the delta method, correctly accounting for the
+anti-correlation between Vmax and Km that arises from non-linear fitting.
+Results are returned as a frozen KineticConstants dataclass.
+
+kcat and kcat/Km carry physically meaningful units (s⁻¹ and M⁻¹·s⁻¹
+respectively) only after a calibration curve has been applied upstream so that
+Vmax is in µM/s. Before calibration both quantities are in non-physical units
+and should not be compared to literature values.
+
+Typical usage example:
+    >>> from enzyme_kinetics.core.models import fit_michaelis_menten
+    >>> fit = fit_michaelis_menten(s, v)
+    >>> constants = derive_constants("HexCoA", "peak_1", fit, enzyme_conc_um=0.5)
+    >>> print(constants.kcat, constants.kcat_km_M)
+"""
+
 from __future__ import annotations
 
 from dataclasses import dataclass
@@ -8,13 +29,16 @@ from logurich import RichLogAdapter
 
 from .models import FitResult
 
+__all__ = ["derive_constants", "KineticConstants"]
+
 _logger = RichLogAdapter(component=__name__)
 
-# ---------------------------------------------------------------------------
-# FIX 1 — kcat/Km error propagation using full covariance matrix
-# ---------------------------------------------------------------------------
+# ---------------------------------------------------------------------
+# kcat/Km error propagation using full covariance matrix
+# ---------------------------------------------------------------------
 
-_UM_TO_M: float = 1e-6  # unit conversion factor: µM → M
+# Unit conversion factor: µM → M.
+_UM_TO_M: float = 1e-6
 
 
 def _kcat_km_with_covariance(
@@ -23,7 +47,7 @@ def _kcat_km_with_covariance(
     enzyme_conc_um: float,
     pcov: np.ndarray,
 ) -> tuple[float, float]:
-    """Propagate kcat/Km uncertainty using the full Vmax–Km covariance matrix.
+    """Propagates kcat/Km uncertainty using the full Vmax–Km covariance matrix.
 
     The standard relative-error formula assumes Vmax and Km are uncorrelated,
     which is generally false for MM fitting (they are anti-correlated). This
@@ -53,7 +77,7 @@ def _kcat_km_with_covariance(
             Units of pcov entries must be consistent with vmax and km units.
 
     Returns:
-        Tuple of (kcat_km_M, kcat_km_se_M) in M⁻¹·s⁻¹. Returns (nan, nan)
+        A tuple of (kcat_km_M, kcat_km_se_M) in M⁻¹·s⁻¹. Returns (nan, nan)
         if km ≤ 0, vmax ≤ 0, or pcov contains nan (e.g. for LB fits).
     """
     if km <= 0 or vmax <= 0:
@@ -84,31 +108,33 @@ def _kcat_km_with_covariance(
     return float(kcat_km_M), kcat_km_se_M
 
 
-# ---------------------------------------------------------------------------
+# ---------------------------------------------------------------------
 # Derived kinetic constants
-# ---------------------------------------------------------------------------
+# ---------------------------------------------------------------------
+
 
 @dataclass(frozen=True, slots=True)
 class KineticConstants:
     """Fully-typed kinetic constants for one peak.
 
     Attributes:
-        peak_id: Peak identifier string.
-        fit: Primary FitResult (MM, Hill, or SI model).
-        kcat: Turnover number (s⁻¹ after calibration; otherwise in raw area
-            units per µM enzyme per second).
-        kcat_se: Standard error of kcat, in the same units as kcat.
-        kcat_km_M: Catalytic efficiency kcat/Km in M⁻¹·s⁻¹ (after
-            calibration). Km is converted from µM to M before computing the
-            ratio so that the result is in the standard literature unit.
-            Before calibration the numerator (kcat) is in non-physical units,
-            so kcat_km_M should not be compared to literature values until
-            calibration has been applied.
-        kcat_km_se_M: Standard error of kcat_km_M in M⁻¹·s⁻¹, propagated
-            via the full Vmax–Km covariance matrix.
-        ki: Substrate inhibition constant Ki (µM); None unless model_type == 'si'.
-        ki_se: Standard error of Ki in µM; None unless model_type == 'si'.
-        lb_fit: Optional Lineweaver-Burk FitResult for cross-validation.
+        substrate: Substrate name string identifying the acyl-CoA donor used
+            in the assay.
+        peak_id: HPLC peak identifier string.
+        fit: Primary FitResult from the MM, Hill, or SI model fit.
+        kcat: Turnover number in s⁻¹ after calibration; in non-physical units
+            (area · µM⁻¹ · s⁻¹) before calibration.
+        kcat_se: Standard error of kcat in the same units as kcat.
+        kcat_km_M: Catalytic efficiency kcat/Km in M⁻¹·s⁻¹ after calibration.
+            Km is converted from µM to M before computing the ratio so that the
+            result is in the standard literature unit. Before calibration the
+            numerator carries non-physical units and kcat_km_M should not be
+            compared to literature values.
+        kcat_km_se_M: Standard error of kcat_km_M in M⁻¹·s⁻¹, propagated via
+            the full Vmax–Km covariance matrix.
+        ki: Substrate inhibition constant Ki in µM; None unless model_type == "si".
+        ki_se: Standard error of Ki in µM; None unless model_type == "si".
+        lb_fit: Optional Lineweaver-Burk FitResult stored for cross-validation.
     """
 
     substrate: str
@@ -123,6 +149,20 @@ class KineticConstants:
     lb_fit: FitResult | None = None
 
     def to_dict(self) -> dict[str, Any]:
+        """Serializes the KineticConstants instance to a flat dictionary.
+
+        Constructs a dictionary suitable for DataFrame or CSV export. The key
+        for the second kinetic parameter is model-dependent: "k_half" for Hill
+        fits and "km" for all other models. hill_n and hill_n_se are emitted
+        only for Hill fits; ki and ki_se are emitted only for SI fits; lb_fit
+        fields (km_lb, vmax_lb, r_squared_lb) are emitted only when lb_fit is
+        not None. Any extra scalar values on fit.extra are forwarded unless
+        their key already exists in the base dictionary.
+
+        Returns:
+            A flat dictionary mapping column name strings to scalar values
+            (float, int, or str). Keys vary by model type as described above.
+        """
         # FIX 7: use model-correct labels for Hill output
         is_hill = self.fit.model_type == "hill"
         base: dict[str, Any] = {
@@ -169,7 +209,7 @@ def derive_constants(
     *,
     lb_fit: FitResult | None = None,
 ) -> KineticConstants:
-    """Compute kcat and kcat/Km from a FitResult.
+    """Computes kcat and kcat/Km from a FitResult.
 
     kcat is computed as Vmax / enzyme_conc_um. Its unit is s⁻¹ only after a
     calibration curve has been applied (so that Vmax is in µM/s); before
@@ -187,17 +227,21 @@ def derive_constants(
     performed; the caller is responsible for unit consistency.
 
     Ki and ki_se are extracted from the fit and promoted to typed fields when
-    the model is a substrate-inhibition fit (model_type == 'si').
+    the model is a substrate-inhibition fit (model_type == "si").
 
     Args:
-        peak_id: Identifier for the peak being processed.
+        substrate: Substrate name string identifying the acyl-CoA donor used
+            in the assay (e.g. "HexCoA").
+        peak_id: Identifier for the HPLC peak being processed.
         fit: FitResult from any kinetic model fit. Km (popt[1]) must be in µM.
         enzyme_conc_um: Total enzyme concentration in µM.
-        lb_fit: Optional Lineweaver-Burk cross-validation fit.
+        lb_fit: Optional Lineweaver-Burk cross-validation FitResult. Defaults
+            to None.
 
     Returns:
-        KineticConstants with kcat (s⁻¹ post-calibration), kcat_km_M
-        (M⁻¹·s⁻¹), their SEs, and optionally Ki/ki_se for SI fits.
+        KineticConstants with substrate, peak_id, kcat in s⁻¹ (post-calibration),
+        kcat_km_M in M⁻¹·s⁻¹, their SEs, and optionally ki/ki_se in µM for
+        SI fits.
     """
     # kcat = Vmax / [E]
     kcat = fit.vmax / enzyme_conc_um
@@ -205,7 +249,10 @@ def derive_constants(
 
     # FIX 1 + units: full covariance propagation; Km converted µM→M inside
     kcat_km_M, kcat_km_se_M = _kcat_km_with_covariance(
-        fit.vmax, fit.km, enzyme_conc_um, fit.pcov,
+        fit.vmax,
+        fit.km,
+        enzyme_conc_um,
+        fit.pcov,
     )
 
     # FIX 4: promote Ki to typed fields for SI fits

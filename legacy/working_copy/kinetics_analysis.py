@@ -10,7 +10,14 @@ import numpy as np
 import pandas as pd
 
 from kgdlibs.pathtools import ExportPathBuilder, to_absolute_path
-from plots.config import COUNT, MEAN, PEAK_ID, PROTEIN, REL_ACT, STD, filter_stats_params
+from plots.config import (
+    COUNT,
+    MEAN,
+    PEAK_ID,
+    REL_ACT,
+    STD,
+    filter_stats_params,
+)
 from process.analyze import COLUMN_NAME_MAP, normalize_peak_id
 from process.compounds import COMPOUND_PREFIXES
 from process.io import read_csv_peaks
@@ -23,10 +30,7 @@ from kinetics_core import (
     fit_michaelis_menten,
     fit_hill,
     fit_lineweaver_burk,
-    michaelis_menten,
-    hill_equation,
     prepare_velocity,
-    fit_calibration,
     Calibration,
 )
 
@@ -35,9 +39,10 @@ _logger = logging.getLogger(__name__)
 SUBSTRATE_CONC: Final[str] = "substrate_conc"
 
 
-# ---------------------------------------------------------------------------
+# ---------------------------------------------------------------------
 # Config — data loading and export paths (unchanged from original)
-# ---------------------------------------------------------------------------
+# ---------------------------------------------------------------------
+
 
 @dataclass(frozen=True, slots=True)
 class KineticsConfig:
@@ -55,7 +60,9 @@ class KineticsConfig:
         object.__setattr__(self, "peak_prefix", prefixes)
 
     def load(self, path: Path, **kwargs: Any) -> pd.DataFrame:
-        df = read_csv_peaks(path, convert_to_float32=False, verbose=self.verbose, **kwargs)
+        df = read_csv_peaks(
+            path, convert_to_float32=False, verbose=self.verbose, **kwargs
+        )
         df.rename(columns=COLUMN_NAME_MAP, inplace=True)
         df = filter_stats_params(df, self.peak_attr)
         require_columns(df, (SUBSTRATE_CONC, PEAK_ID, MEAN, STD, COUNT, REL_ACT))
@@ -66,7 +73,9 @@ class KineticsConfig:
     def build_export_path(self, dest: Path, tag: str) -> Path:
         base_name = f"{tag}_kinetics_{self.peak_attr}.png"
         build_path = ExportPathBuilder(
-            base_name, overwrite=self.overwrite, merge=self.merge,
+            base_name,
+            overwrite=self.overwrite,
+            merge=self.merge,
         ).build(dest)
         return build_path.path
 
@@ -76,14 +85,15 @@ class KineticsConfig:
         return cls(**{k: v for k, v in data.items() if k in valid_keys})
 
 
-# ---------------------------------------------------------------------------
+# ---------------------------------------------------------------------
 # Per-peak data extraction
-# ---------------------------------------------------------------------------
+# ---------------------------------------------------------------------
+
 
 def _extract_peak_data(
-        df: pd.DataFrame,
-        peak_id: str,
-        rxn_time: float,
+    df: pd.DataFrame,
+    peak_id: str,
+    rxn_time: float,
 ) -> tuple[np.ndarray, np.ndarray, np.ndarray] | None:
     sub = df.loc[df[PEAK_ID] == peak_id].dropna(subset=[SUBSTRATE_CONC, MEAN])
     if sub.empty or sub[MEAN].max() == 0:
@@ -97,17 +107,18 @@ def _extract_peak_data(
     )
 
 
-# ---------------------------------------------------------------------------
+# ---------------------------------------------------------------------
 # Model selection strategy (replaces hardcoded 'OLV' branch)
-# ---------------------------------------------------------------------------
+# ---------------------------------------------------------------------
+
 
 def _select_and_fit(
-        peak_id: str,
-        s: np.ndarray,
-        v: np.ndarray,
-        v_sem: np.ndarray,
-        *,
-        special_peaks: dict[str, str] | None = None,
+    peak_id: str,
+    s: np.ndarray,
+    v: np.ndarray,
+    v_sem: np.ndarray,
+    *,
+    special_peaks: dict[str, str] | None = None,
 ) -> FitResult:
     special = (special_peaks or {}).get(peak_id)
     if special == "hill":
@@ -115,18 +126,19 @@ def _select_and_fit(
     return fit_michaelis_menten(s, v, sigma=v_sem)
 
 
-# ---------------------------------------------------------------------------
+# ---------------------------------------------------------------------
 # Orchestrator
-# ---------------------------------------------------------------------------
+# ---------------------------------------------------------------------
+
 
 class EnzymeKineticsAnalysis:
     def __init__(
-            self,
-            path: str | Path,
-            target_dir: str | Path,
-            *,
-            config: KineticsConfig | None = None,
-            special_peaks: dict[str, str] | None = None,
+        self,
+        path: str | Path,
+        target_dir: str | Path,
+        *,
+        config: KineticsConfig | None = None,
+        special_peaks: dict[str, str] | None = None,
     ) -> None:
         self.path = to_absolute_path(path)
         self.dest = to_absolute_path(target_dir)
@@ -152,7 +164,11 @@ class EnzymeKineticsAnalysis:
             s, v, v_sem = data
             try:
                 mm_fit = _select_and_fit(
-                    peak_id, s, v, v_sem, special_peaks=self.special_peaks,
+                    peak_id,
+                    s,
+                    v,
+                    v_sem,
+                    special_peaks=self.special_peaks,
                 )
                 lb_fit: FitResult | None = None
                 try:
@@ -160,7 +176,10 @@ class EnzymeKineticsAnalysis:
                 except Exception:
                     pass
                 self.results[peak_id] = derive_constants(
-                    peak_id, mm_fit, self.config.prot_conc, lb_fit=lb_fit,
+                    peak_id,
+                    mm_fit,
+                    self.config.prot_conc,
+                    lb_fit=lb_fit,
                 )
             except Exception as exc:
                 _logger.warning("Fit failed for %s: %s", peak_id, exc)
@@ -174,12 +193,18 @@ class EnzymeKineticsAnalysis:
             if data is None:
                 continue
             s, v, v_sem = data
-            v_um = np.asarray(cal.area_to_conc(v * self.config.rxn_time)) / self.config.rxn_time
+            v_um = (
+                np.asarray(cal.area_to_conc(v * self.config.rxn_time))
+                / self.config.rxn_time
+            )
             v_sem_um = v_sem / cal.slope
             try:
                 mm_fit = fit_michaelis_menten(s, v_um, sigma=v_sem_um)
                 recalculated[peak_id] = derive_constants(
-                    peak_id, mm_fit, self.config.prot_conc, lb_fit=kc.lb_fit,
+                    peak_id,
+                    mm_fit,
+                    self.config.prot_conc,
+                    lb_fit=kc.lb_fit,
                 )
             except Exception as exc:
                 _logger.warning("Calibrated re-fit failed for %s: %s", peak_id, exc)
@@ -213,8 +238,14 @@ class EnzymeKineticsAnalysis:
 
             s, v, v_sem = data
             ax.errorbar(
-                s, v, yerr=v_sem,
-                fmt="o", color="steelblue", alpha=0.7, capsize=3, label="Data",
+                s,
+                v,
+                yerr=v_sem,
+                fmt="o",
+                color="steelblue",
+                alpha=0.7,
+                capsize=3,
+                label="Data",
             )
 
             s_fit = np.linspace(0, np.max(s) * 1.1, 200)
@@ -248,7 +279,8 @@ class EnzymeKineticsAnalysis:
             _logger.warning("No kinetics data to export.")
             return self
         csv_path = self.config.build_export_path(
-            self.dest, tag=self.path.stem,
+            self.dest,
+            tag=self.path.stem,
         ).with_suffix(".csv")
         stats_df.to_csv(csv_path, index=False)
         _logger.info("Exported %s rows to %s", len(stats_df), csv_path)
