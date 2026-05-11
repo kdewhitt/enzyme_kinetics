@@ -42,6 +42,9 @@ def hill_equation(s: np.ndarray, vmax: float, k_half: float, n: float) -> np.nda
 
 
 def threshold_michaelis_menten(s: np.ndarray, vmax: float, km: float, s0: float) -> np.ndarray:
+    """Michaelis-Menten model with a dead-zone threshold (S0).
+    The threshold model: v=0 if S <= S0, otherwise standard MM.
+    """
     return np.where(s > s0, (vmax * (s - s0)) / (km + (s - s0)), 0.0)
 
 

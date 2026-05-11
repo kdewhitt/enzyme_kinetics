@@ -92,8 +92,8 @@ def run_enzyme_kinetic_analysis_pipeline(args: KineticArgs):
 
     # 7. Plot and save results
     base_dest_path = args.target_dir / args.path.name
-    analyzer.plot(base_dest_path, overwrite=args.overwrite)
     analyzer.export_csv(base_dest_path, overwrite=args.overwrite)
+    analyzer.plot(base_dest_path, overwrite=args.overwrite)
 
     _logger.info("Analysis complete.")
 

@@ -12,7 +12,10 @@
 - [ ] Run claude to analyze for unused parameters and attributes across codebase
 
 
+
+
 # Observations/ Comments/ Notes
+- Vmax : area per minute // need a product standard curve to convert to uM per minute
 
 ## Original code:
 - class LineweaverBurkModel(EnzymeKineticModel).fit()
