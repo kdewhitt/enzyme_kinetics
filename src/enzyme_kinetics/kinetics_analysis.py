@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import logging
-from dataclasses import dataclass, field, fields
 from pathlib import Path
 from typing import Any, Final, Self
 
@@ -9,72 +8,28 @@ import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
 
-from kgdlibs.pathtools import ExportPathBuilder, to_absolute_path
-from plots.config import COUNT, MEAN, PEAK_ID, PROTEIN, REL_ACT, STD, filter_stats_params
-from process.analyze import COLUMN_NAME_MAP, normalize_peak_id
-from process.compounds import COMPOUND_PREFIXES
-from process.io import read_csv_peaks
-from process.normals import require_columns
-
-from kinetics_core import (
-    FitResult,
-    KineticConstants,
-    Calibration,
+from .calibration import Calibration
+from .config import KineticsConfig
+from .kinetics_core import (
     derive_constants,
-    fit_michaelis_menten,
     fit_hill,
     fit_lineweaver_burk,
-    michaelis_menten,
-    hill_equation,
-    prepare_velocity,
-    fit_calibration,
+    fit_michaelis_menten,
+    FitResult,
+    KineticConstants,
     lineweaver_burk_transform,
+    prepare_velocity,
 )
 
 _logger = logging.getLogger(__name__)
 
 SUBSTRATE_CONC: Final[str] = "substrate_conc"
-
-
-# ---------------------------------------------------------------------------
-# Config — data loading and export paths
-# ---------------------------------------------------------------------------
-
-@dataclass(frozen=True, slots=True)
-class KineticsConfig:
-    prot_conc: float = 12.25
-    rxn_time: float = 180.0
-    peak_attr: str = "area"
-    detect_prefix: bool = False
-    peak_prefix: frozenset[str] = field(default_factory=frozenset)
-    overwrite: bool = False
-    merge: bool = True
-    verbose: bool = False
-
-    def __post_init__(self) -> None:
-        prefixes = self.peak_prefix | frozenset(COMPOUND_PREFIXES)
-        object.__setattr__(self, "peak_prefix", prefixes)
-
-    def load(self, path: Path, **kwargs: Any) -> pd.DataFrame:
-        df = read_csv_peaks(path, convert_to_float32=False, verbose=self.verbose, **kwargs)
-        df.rename(columns=COLUMN_NAME_MAP, inplace=True)
-        df = filter_stats_params(df, self.peak_attr)
-        require_columns(df, (SUBSTRATE_CONC, PEAK_ID, MEAN, STD, COUNT, REL_ACT))
-        prefixes = tuple(self.peak_prefix) if self.detect_prefix else None
-        df = normalize_peak_id(df, prefix=prefixes)
-        return df
-
-    def build_export_path(self, dest: Path, tag: str) -> Path:
-        base_name = f"{tag}_kinetics_{self.peak_attr}.png"
-        build_path = ExportPathBuilder(
-            base_name, overwrite=self.overwrite, merge=self.merge,
-        ).build(dest)
-        return build_path.path
-
-    @classmethod
-    def from_dict(cls, data: dict[str, Any]) -> Self:
-        valid_keys = {f.name for f in fields(cls)}
-        return cls(**{k: v for k, v in data.items() if k in valid_keys})
+COUNT = "count"
+MEAN = "mean"
+PEAK_ID = "peak_id"
+# PROTEIN = "protein"
+# REL_ACT = "rel_activity"
+STD = "std"
 
 
 # ---------------------------------------------------------------------------
@@ -106,7 +61,7 @@ def _extract_peak_data(
         return None
     return prepare_velocity(
         sub[SUBSTRATE_CONC].values,
-        sub[MEAN].values,
+        sub[MEAN].values,  # velocity?
         sub[STD].values,
         sub[COUNT].values,
         rxn_time,
@@ -144,8 +99,8 @@ class EnzymeKineticsAnalysis:
         config: KineticsConfig | None = None,
         special_peaks: dict[str, str] | None = None,
     ) -> None:
-        self.path = to_absolute_path(path)
-        self.dest = to_absolute_path(target_dir)
+        self.path = Path(path).expanduser().resolve()
+        self.dest = Path(target_dir).expanduser().resolve()
         self.config = config or KineticsConfig()
         self.special_peaks = special_peaks or {}
 
@@ -157,6 +112,8 @@ class EnzymeKineticsAnalysis:
 
     def load(self, **kwargs: Any) -> Self:
         self.df = self.config.load(self.path, **kwargs)
+        self.df.sort_values(by=[PEAK_ID, SUBSTRATE_CONC], inplace=True)
+        _logger.info("Loaded %d peaks from %s", len(self.df), self.path)
         return self
 
     def fit(self) -> Self:
@@ -178,6 +135,8 @@ class EnzymeKineticsAnalysis:
                 self.results[peak_id] = derive_constants(
                     peak_id, mm_fit, self.config.prot_conc, lb_fit=lb_fit,
                 )
+                print(f"✓ {peak_id}: {self.results[peak_id]}")
+
             except Exception as exc:
                 _logger.warning("Fit failed for %s: %s", peak_id, exc)
         return self

@@ -16,6 +16,23 @@ _logger = logging.getLogger(__name__)
 # ---------------------------------------------------------------------------
 
 def michaelis_menten(s: np.ndarray, vmax: float, km: float) -> np.ndarray:
+    """
+    Michaelis-Menten enzyme kinetics model.
+
+    Equation: v = (Vmax * [S]) / (Km + [S])
+
+    substrate_conc : np.ndarray
+            Substrate concentrations (µM)
+        Vmax : float
+            Maximum reaction velocity
+        Km : float
+            Michaelis constant
+
+        Returns
+        -------
+        velocity : np.ndarray
+            Reaction velocities
+    """
     return (vmax * s) / (km + s)
 
 
@@ -25,6 +42,29 @@ def hill_equation(s: np.ndarray, vmax: float, k_half: float, n: float) -> np.nda
 
 
 def substrate_inhibition(s: np.ndarray, vmax: float, km: float, ki: float) -> np.ndarray:
+    """
+    Substrate inhibition equation.
+
+    Parameters
+    ----------
+    substrate_conc : np.ndarray
+        Substrate concentrations (µM)
+    Vmax : float
+        Maximum reaction velocity
+    Km : float
+        Michaelis constant
+    Ki : float
+        Inhibition constant
+
+    Equation: v = (Vmax * [S]) / (Km + [S] + [S]²/Ki)
+
+    Useful when enzyme activity decreases at high substrate concentrations.
+
+    Returns
+    -------
+    velocity : np.ndarray
+        Reaction velocities
+    """
     return (vmax * s) / (km + s + (s ** 2) / ki)
 
 
@@ -32,6 +72,25 @@ def lineweaver_burk_transform(
     s: np.ndarray,
     v: np.ndarray,
 ) -> tuple[np.ndarray, np.ndarray]:
+    """
+    Lineweaver-Burk equation.
+
+    Parameters
+    ----------
+    substrate_conc_inv : np.ndarray
+        Inverse substrate concentrations (1/[S])
+    Vmax : float
+        Maximum reaction velocity
+    Km : float
+        Michaelis constant
+
+    Returns
+    -------
+    velocity_inv : np.ndarray
+        Inverse velocities (1/v)
+
+    (Km / Vmax) * substrate_conc_inv + 1 / Vmax
+    """
     mask = (s > 0) & (v > 0)
     return 1.0 / s[mask], 1.0 / v[mask]
 
@@ -129,12 +188,12 @@ class FitResult:
         return self.model_func(s, *self.popt)
 
 
-def _r_squared(observed: np.ndarray, predicted: np.ndarray) -> float:
+def r_squared(observed: np.ndarray, predicted: np.ndarray) -> float:
     ss_res = np.sum((observed - predicted) ** 2)
     ss_tot = np.sum((observed - np.mean(observed)) ** 2)
     if ss_tot == 0:
         return 0.0
-    return 1.0 - ss_res / ss_tot
+    return 1.0 - (ss_res / ss_tot)
 
 
 # ---------------------------------------------------------------------------
@@ -168,7 +227,7 @@ def fit_model(
         popt=tuple(popt.tolist()),
         perr=perr,
         pcov=pcov,  # FIX 1: store full covariance matrix
-        r_squared=_r_squared(v, predicted),
+        r_squared=r_squared(v, predicted),
         n_points=len(s),
         model_type=model_type,  # FIX 7: propagate model tag
     )
@@ -204,7 +263,14 @@ def fit_substrate_inhibition(
     *,
     sigma: np.ndarray | None = None,
 ) -> FitResult:
-    """Fit the substrate-inhibition model. Ki is accessible via FitResult.ki."""
+    """Fit the substrate-inhibition model. Ki is accessible via FitResult.ki.
+
+    p0 = [Vmax_init, Km_init, Ki_init]
+
+    Equation: v = (Vmax * [S]) / (Km + [S] + [S]²/Ki)
+
+    Useful when enzyme activity decreases at high substrate concentrations.
+    """
     p0 = [float(np.max(v)), float(np.median(s)), float(np.max(s))]
     return fit_model(substrate_inhibition, s, v, p0, sigma=sigma, model_type="si")
 
@@ -386,6 +452,7 @@ def derive_constants(
         KineticConstants populated with kcat, kcat_km (and their SEs), and
         optionally Ki/ki_se for substrate-inhibition fits.
     """
+    # kcat = Vmax / [E]
     kcat = fit.vmax / enzyme_conc_um
     kcat_se = fit.vmax_se / enzyme_conc_um
 
@@ -411,121 +478,6 @@ def derive_constants(
         ki=ki,
         ki_se=ki_se,
         lb_fit=lb_fit,
-    )
-
-
-# ---------------------------------------------------------------------------
-# Calibration — linear standard curve
-# FIX 2, FIX 6
-# ---------------------------------------------------------------------------
-
-@dataclass(frozen=True, slots=True)
-class Calibration:
-    """Linear HPLC calibration curve (peak area = slope × [CoA] + intercept).
-
-    Assumes a linear detector response (Beer-Lambert regime). Fit via
-    curve_fit with optional sigma weighting.
-
-    Attributes:
-        slope: Calibration slope (area / µM).
-        slope_se: Standard error of slope.
-        intercept: Calibration intercept (area at zero concentration).
-        intercept_se: Standard error of intercept.
-        r_squared: Coefficient of determination; ≥ 0.999 expected for HPLC.
-        conc_range: (min, max) concentration of calibration standards in µM.
-    """
-
-    slope: float
-    slope_se: float
-    intercept: float
-    intercept_se: float
-    r_squared: float
-    conc_range: tuple[float, float]
-
-    # FIX 6: restore is_valid() guard from original CalibrationCurve
-    def is_valid(self, r2_threshold: float = 0.999) -> bool:
-        """Return True if the calibration meets quality thresholds.
-
-        Requires slope > 0 (positive detector response) and R² ≥ r2_threshold.
-        The default threshold is 0.999, consistent with typical CoA/HPLC
-        calibrations; the original codebase used 0.95, which is retained as
-        an acceptable lower bound via the keyword argument.
-
-        Args:
-            r2_threshold: Minimum acceptable R². Defaults to 0.999.
-
-        Returns:
-            True if slope > 0 and r_squared ≥ r2_threshold.
-        """
-        return self.slope > 0 and self.r_squared >= r2_threshold
-
-    def area_to_conc(self, area: np.ndarray | float) -> np.ndarray | float:
-        return (area - self.intercept) / self.slope
-
-    def conc_to_area(self, conc: np.ndarray | float) -> np.ndarray | float:
-        return self.slope * conc + self.intercept
-
-    def area_to_conc_with_error(
-        self,
-        area: float,
-        area_se: float,
-    ) -> tuple[float, float]:
-        """Convert a single area measurement to concentration with propagated error.
-
-        Uses the full delta method, including intercept uncertainty (FIX 2):
-
-            σ_C² = (σ_area / slope)²
-                 + ((area − intercept) · σ_slope / slope²)²
-                 + (σ_intercept / slope)²
-
-        The intercept term was omitted in the original codebase. For well-behaved
-        calibrations (intercept ≈ 0) the contribution is negligible, but it is
-        included here for completeness.
-
-        Args:
-            area: Measured peak area.
-            area_se: Standard error of the area measurement.
-
-        Returns:
-            Tuple of (concentration in µM, concentration SE in µM).
-        """
-        conc = float(self.area_to_conc(area))
-        dc_da = 1.0 / self.slope
-        dc_ds = -(area - self.intercept) / (self.slope ** 2)
-        dc_di = -1.0 / self.slope  # FIX 2: intercept term
-        conc_se = float(
-            np.sqrt(
-                (dc_da * area_se) ** 2
-                + (dc_ds * self.slope_se) ** 2
-                + (dc_di * self.intercept_se) ** 2,  # FIX 2
-            ),
-        )
-        return conc, conc_se
-
-
-def fit_calibration(
-    concentrations: np.ndarray,
-    peak_areas: np.ndarray,
-    *,
-    sigma: np.ndarray | None = None,
-) -> Calibration:
-    def _linear(x: np.ndarray, slope: float, intercept: float) -> np.ndarray:
-        return slope * x + intercept
-
-    effective_sigma = sigma if sigma is not None and np.any(sigma > 0) else None
-    popt, pcov = curve_fit(
-        _linear, concentrations, peak_areas,
-        sigma=effective_sigma, absolute_sigma=True,
-    )
-    perr = np.sqrt(np.diag(pcov))
-    predicted = _linear(concentrations, *popt)
-    return Calibration(
-        slope=popt[0],
-        slope_se=perr[0],
-        intercept=popt[1],
-        intercept_se=perr[1],
-        r_squared=_r_squared(peak_areas, predicted),
-        conc_range=(float(concentrations.min()), float(concentrations.max())),
     )
 
 

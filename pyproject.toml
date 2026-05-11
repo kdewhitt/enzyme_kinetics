@@ -8,6 +8,9 @@ authors = [
 ]
 requires-python = ">=3.14"
 dependencies = [
+    "kgdlibs",
+    "logurich",
+    "matplotlib>=3.10.9",
     "numpy>=2.4.4",
     "pandas>=3.0.2",
     "pylint>=4.0.5",
@@ -22,7 +25,17 @@ enzyme-kinetics = "enzyme_kinetics:main"
 requires = ["uv_build>=0.11.11,<0.12.0"]
 build-backend = "uv_build"
 
+[tool.uv.sources]
+logurich = { git = "https://github.com/kdewhitt/logurich.git" }
+kgdlibs = { git = "https://github.com/kdewhitt/kgdlibs.git" }
+
 [dependency-groups]
 dev = [
     "pytest>=9.0.3",
+]
+plotting = [
+    "matplotlib>=3.10.9",
+    "scipy>=1.17.1",
+    "scipy-stubs>=1.17.1.4",
+    "seaborn>=0.13.2",
 ]

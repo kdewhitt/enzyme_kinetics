@@ -16,6 +16,7 @@ from models import MichaelisMentenModel, LineweaverBurkModel, KineticParameters
 from calibration import CalibrationCurve, CalibrationParameters
 
 
+# examined
 @dataclass
 class EnzymeKineticsResult:
     """Complete kinetics analysis result for a single enzyme/peak."""
