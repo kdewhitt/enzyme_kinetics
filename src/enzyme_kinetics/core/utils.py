@@ -80,7 +80,7 @@ def extract_peak_data(
         return None
     return prepare_velocity(
         sub[SUBSTRATE_CONC].values,
-        sub[MEAN].values,  # velocity?
+        sub[MEAN].values,
         sub[STD].values,
         sub[COUNT].values,
         rxn_time,

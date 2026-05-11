@@ -267,6 +267,35 @@ def fit_michaelis_menten(
     km_guess = km_init if km_init is not None else float(np.median(s))
     return fit_model(michaelis_menten, s, v, [vmax_guess, km_guess], sigma=sigma, model_type="mm")
 
+def fit_threshold_michaelis_menten(
+    s: np.ndarray,
+    v: np.ndarray,
+    *,
+    sigma: np.ndarray | None = None,
+    vmax_init: float | None = None,
+    km_init: float | None = None,
+) -> FitResult:
+    """Fit the Michaelis-Menten equation to velocity data.
+
+    The fitted Km is in the same units as s. Throughout this codebase s is
+    expected in µM, so the returned Km is in µM. Passing s in any other unit
+    (mM, nM) will produce a Km in that unit with no warning; the caller is
+    responsible for unit consistency.
+
+    Args:
+        s: Substrate concentration array in µM.
+        v: Reaction velocity array (area/s before calibration; µM/s after).
+        sigma: Per-point standard errors on v for weighted fitting. If None
+            or all-zero, unweighted fitting is used.
+        vmax_init: Initial guess for Vmax. Defaults to max(v).
+        km_init: Initial guess for Km in µM. Defaults to median(s).
+
+    Returns:
+        FitResult with model_type='mm', Km in µM, and full pcov matrix.
+    """
+    vmax_guess = vmax_init if vmax_init is not None else float(np.max(v)*2)
+    km_guess = km_init if km_init is not None else float(np.median(s))
+    return fit_model(threshold_michaelis_menten, s, v, [vmax_guess, km_guess, 0.5], sigma=sigma, model_type="mm")
 
 def fit_hill(
     s: np.ndarray,

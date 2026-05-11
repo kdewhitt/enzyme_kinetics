@@ -111,6 +111,7 @@ class KineticConstants:
         lb_fit: Optional Lineweaver-Burk FitResult for cross-validation.
     """
 
+    substrate: str
     peak_id: str
     fit: FitResult
     kcat: float
@@ -125,6 +126,7 @@ class KineticConstants:
         # FIX 7: use model-correct labels for Hill output
         is_hill = self.fit.model_type == "hill"
         base: dict[str, Any] = {
+            "substrate": self.substrate,
             "peak_id": self.peak_id,
             "model": self.fit.model_type,
             "vmax": self.fit.vmax,
@@ -160,6 +162,7 @@ class KineticConstants:
 
 
 def derive_constants(
+    substrate: str,
     peak_id: str,
     fit: FitResult,
     enzyme_conc_um: float,
@@ -213,6 +216,7 @@ def derive_constants(
         ki_se = fit.ki_se
 
     return KineticConstants(
+        substrate=substrate,
         peak_id=peak_id,
         fit=fit,
         kcat=kcat,

@@ -15,6 +15,11 @@ from .utils import extract_peak_data
 
 _logger = RichLogAdapter(component=__name__)
 
+_LABEL_MAP = {
+    "OLA": "Olivetolic Acid",
+    "OLV": "Olivetol",
+}
+
 
 class KineticPlots:
     def __init__(
@@ -35,7 +40,7 @@ class KineticPlots:
         """Returns a PathBuilder seeded with the acquisition date and destination path."""
         return PathBuilder.from_path(self.path, suffix=".png", overwrite=self.overwrite)
 
-    def plot(self, *, show: bool = False, cols: int = 3) -> Self:
+    def plot(self, *, show: bool = False, cols: int = 2) -> Self:
         """Plot MM (or Hill) fit curves for all peaks in a multi-panel grid.
 
         Each panel shows the raw data with error bars and the fitted curve,
@@ -79,16 +84,25 @@ class KineticPlots:
             # FIX 7: use model-correct label for the affinity parameter
             is_hill = kc.fit.model_type == "hill"
             km_label = "k_half" if is_hill else "Km"
-            label = (
-                f"Vmax={kc.fit.vmax:.2f}±{kc.fit.vmax_se:.2f}\n"
-                f"{km_label}={kc.fit.km:.2f}±{kc.fit.km_se:.2f}\n"
-                f"R²={kc.fit.r_squared:.4f}"
-            )
+
+            if kc.fit.km > 1000:
+                label = (
+                    f"Vmax={kc.fit.vmax:.2g}±{kc.fit.vmax_se:.2g}\n"
+                    f"{km_label}={kc.fit.km:.2g}±{kc.fit.km_se:.2g}\n"
+                    f"R²={kc.fit.r_squared:.4g}"
+                )
+            else:
+                label = (
+                    f"Vmax={kc.fit.vmax:.2f}±{kc.fit.vmax_se:.2f}\n"
+                    f"{km_label}={kc.fit.km:.2f}±{kc.fit.km_se:.2f}\n"
+                    f"R²={kc.fit.r_squared:.4f}"
+                )
+
             ax.plot(s_fit, v_fit, "--", color="red", label=label)
             ax.legend(fontsize=8, loc="lower right")
-            ax.set_title(peak_id, fontweight="bold")
-            ax.set_xlabel("[S] (µM)")
-            ax.set_ylabel("v (signal / min)")
+            ax.set_title(_LABEL_MAP.get(peak_id, peak_id), fontweight="bold")
+            ax.set_xlabel(f"Substrate Concentration [{kc.substrate}] (µM)")
+            ax.set_ylabel("Velocity (µM min⁻¹)")  # should be (mean area)/min BEFORE calibration
 
         for j in range(len(peaks), len(axes)):
             axes[j].axis("off")
@@ -103,7 +117,7 @@ class KineticPlots:
         return self
 
     # FIX 5 — restore publication plots: LB, residuals, efficiency comparison
-    def plot_lineweaver_burk(self, *, show: bool = False, cols: int = 3) -> Self:
+    def plot_lineweaver_burk(self, *, show: bool = False, cols: int = 2) -> Self:
         """Plot Lineweaver-Burk (double-reciprocal) panels for all peaks with LB fits.
 
         The fit line is drawn over the observed 1/[S] range. The y-intercept
@@ -139,7 +153,7 @@ class KineticPlots:
             s, v, _, _ = data
             s_inv, v_inv = lineweaver_burk_transform(s, v)
 
-            ax.scatter(s_inv, v_inv, color="steelblue", zorder=3, label="Data (1/v vs 1/[S])")
+            ax.scatter(s_inv, v_inv, color="steelblue", zorder=3, label="Data (1/V vs 1/[S])")
 
             # Fit line over observed 1/[S] range
             x_line = np.linspace(s_inv.min(), s_inv.max(), 200)
@@ -165,9 +179,9 @@ class KineticPlots:
                     fontsize=7, color="orange", ha="right",
                 )
 
-            ax.set_title(peak_id, fontweight="bold")
+            ax.set_title(_LABEL_MAP.get(peak_id, peak_id), fontweight="bold")
             ax.set_xlabel("1/[S] (µM⁻¹)")
-            ax.set_ylabel("1/v")
+            ax.set_ylabel("1/V (µM⁻¹ min)")
             ax.legend(fontsize=8)
 
         for j in range(len(lb_peaks), len(axes)):
@@ -182,7 +196,7 @@ class KineticPlots:
         _logger.info("Saved Lineweaver-Burk plot to %s", plot_path)
         return self
 
-    def plot_residuals(self, *, show: bool = False, cols: int = 3) -> Self:
+    def plot_residuals(self, *, show: bool = False, cols: int = 2) -> Self:
         """Plot MM fit residuals (v_observed − v_predicted) vs [S] for all peaks.
 
         A horizontal reference line at zero is drawn. Systematic curvature in
@@ -223,8 +237,8 @@ class KineticPlots:
                 s, residuals, yerr=v_sem, fmt="o", color="steelblue",
                 alpha=0.7, capsize=3,
             )
-            ax.set_title(peak_id, fontweight="bold")
-            ax.set_xlabel("[S] (µM)")
+            ax.set_title(_LABEL_MAP.get(peak_id, peak_id), fontweight="bold")
+            ax.set_xlabel(f"Substrate Concentration [{kc.substrate}] (µM)")
             ax.set_ylabel("Residual (v − v̂)")
 
         for j in range(len(peaks), len(axes)):
@@ -256,7 +270,11 @@ class KineticPlots:
             _logger.warning("No results available for efficiency comparison.")
             return self
 
-        peaks = list(self.results)
+        results = self.results.copy()
+        results.pop("OLV", None)
+
+        peaks = list(results)
+        # peaks = list(self.results)
         kcs = [self.results[p] for p in peaks]
 
         km_vals = [kc.fit.km for kc in kcs]

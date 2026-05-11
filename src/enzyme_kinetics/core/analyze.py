@@ -10,7 +10,7 @@ from logurich import RichLogAdapter
 
 from .calibration import Calibration
 from .derive import derive_constants, KineticConstants
-from .models import fit_hill, fit_lineweaver_burk, fit_michaelis_menten, FitResult
+from .models import fit_hill, fit_lineweaver_burk, fit_michaelis_menten, fit_threshold_michaelis_menten, FitResult
 from .plots import KineticPlots
 from .utils import extract_peak_data
 
@@ -32,6 +32,9 @@ def _select_and_fit(
     special = (special_peaks or {}).get(peak_id)
     if special == "hill":
         return fit_hill(s, v, sigma=v_sem)
+
+    # if peak_id.lower() == "olv":
+    #     return fit_threshold_michaelis_menten(s, v, sigma=v_sem)
     return fit_michaelis_menten(s, v, sigma=v_sem)
 
 
@@ -45,11 +48,13 @@ class KineticAnalyzer:
         self,
         enzyme_conc_um: float,
         reaction_time_seconds: float,
+        substrate: str,
         data: pd.DataFrame,
         special_peaks: dict[str, str] | None = None,
     ) -> None:
         self.enzyme_conc_um = enzyme_conc_um
         self.reaction_time_seconds = reaction_time_seconds
+        self.substrate = substrate
         self.df = data
         self.special_peaks = special_peaks or {}
 
@@ -73,9 +78,9 @@ class KineticAnalyzer:
                 except Exception:
                     pass
                 self.results[peak_id] = derive_constants(
-                    peak_id, mm_fit, self.enzyme_conc_um, lb_fit=lb_fit,
+                    self.substrate,peak_id, mm_fit, self.enzyme_conc_um, lb_fit=lb_fit,
                 )
-                _logger.success(f"✓ {peak_id}: {self.results[peak_id]}")
+                _logger.success(f"✓ {peak_id}: Km={self.results[peak_id].fit.km}")
 
             except Exception as exc:
                 _logger.warning("Fit failed for %s: %s", peak_id, exc)

@@ -41,6 +41,7 @@ class KineticArgs(BaseModel):
 
     enzyme_conc_um: float = 12.25  # in units µM
     rxn_time: float = 180.0  # in units seconds?
+    substrate: str = "HexCoA"
 
     peak_prefixes: FlexPeakPrefixes = None
 
@@ -78,6 +79,7 @@ def run_enzyme_kinetic_analysis_pipeline(args: KineticArgs):
     analyzer = KineticAnalyzer(
         args.enzyme_conc_um,
         args.reaction_time_seconds,
+        args.substrate,
         data=df,
         special_peaks=None,
     )
