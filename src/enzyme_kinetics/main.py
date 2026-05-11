@@ -9,7 +9,12 @@ from pydantic import BaseModel, computed_field, ConfigDict, Field, field_validat
 from rich.console import Console
 from tyro.conf import Positional
 
-from enzyme_kinetics.core import canonicalize_peak_ids, FlexPeakPrefixes, KineticAnalyzer, load_plottable_data
+from enzyme_kinetics.core import (
+    canonicalize_peak_ids,
+    FlexPeakPrefixes,
+    KineticAnalyzer,
+    load_plottable_data,
+)
 
 configure_richloguru(level="INFO")
 _logger = RichLogAdapter(component=__name__)
@@ -55,12 +60,14 @@ class KineticArgs(BaseModel):
         peak_prefixes: Optional FlexPeakPrefixes configuration controlling
             which peak ID prefixes are recognized during canonicalization.
             If None, default canonicalization rules apply. Defaults to None.
+        is_calibrated: Whether the input mean integrated peak area values have already
+            had calibration corrections applied. Defaults to False.
         overwrite: Whether to overwrite existing output files. If False,
             PathBuilder appends a unique suffix to avoid collisions.
             Defaults to False.
         verbose: Whether to enable verbose logging output. Excluded from
             model serialization. Defaults to False.
-        """
+    """
 
     model_config = ConfigDict(extra="ignore", frozen=True, arbitrary_types_allowed=True)
 
@@ -72,6 +79,8 @@ class KineticArgs(BaseModel):
     substrate: str = "HexCoA"
 
     peak_prefixes: FlexPeakPrefixes = None
+
+    is_calibrated: bool = False
 
     overwrite: bool = False
     verbose: bool = Field(default=False, exclude=True)
@@ -145,7 +154,9 @@ def run_enzyme_kinetic_analysis_pipeline(args: KineticArgs) -> None:
     # 7. Plot and save results
     base_dest_path = args.target_dir / args.path.name
     analyzer.export_csv(base_dest_path, overwrite=args.overwrite)
-    analyzer.plot(base_dest_path, overwrite=args.overwrite)
+    analyzer.plot(
+        base_dest_path, is_calibrated=args.is_calibrated, overwrite=args.overwrite
+    )
 
     _logger.info("Analysis complete.")
 

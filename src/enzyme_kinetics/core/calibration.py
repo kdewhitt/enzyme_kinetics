@@ -32,7 +32,13 @@ from scipy.optimize import curve_fit
 
 from .models import r_squared
 
-__all__ = ["Calibration", "fit_calibration", "load_calibration", "plot_calibration", "save_calibration"]
+__all__ = [
+    "Calibration",
+    "fit_calibration",
+    "load_calibration",
+    "plot_calibration",
+    "save_calibration",
+]
 
 _logger = RichLogAdapter(component=__name__)
 
@@ -143,7 +149,7 @@ class Calibration:
         """
         conc = float(self.area_to_conc(area))
         dc_da = 1.0 / self.slope
-        dc_ds = -(area - self.intercept) / (self.slope ** 2)
+        dc_ds = -(area - self.intercept) / (self.slope**2)
         dc_di = -1.0 / self.slope  # FIX 2: intercept term
         conc_se = float(
             np.sqrt(
@@ -335,7 +341,11 @@ def plot_calibration(
 
     # Panel 1 — calibration curve + fit
     ax_fit.scatter(
-        concentrations, peak_areas, color="steelblue", zorder=3, label="Standards",
+        concentrations,
+        peak_areas,
+        color="steelblue",
+        zorder=3,
+        label="Standards",
     )
     c_line = np.linspace(concentrations.min(), concentrations.max(), 200)
     ax_fit.plot(

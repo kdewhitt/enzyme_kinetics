@@ -93,16 +93,16 @@ def _kcat_km_with_covariance(
     # Partial derivatives of f = vmax / (enzyme_conc_um * km_M)
     # where km_M = km * 1e-6, so ∂f/∂km = ∂f/∂km_M · ∂km_M/∂km = (∂f/∂km_M) * 1e-6
     df_dvmax = 1.0 / (enzyme_conc_um * km_M)
-    df_dkm = -vmax / (enzyme_conc_um * km_M ** 2) * _UM_TO_M
+    df_dkm = -vmax / (enzyme_conc_um * km_M**2) * _UM_TO_M
 
     var_vmax = pcov[0, 0]
     var_km = pcov[1, 1]
     cov_vmax_km = pcov[0, 1]
 
     var_kcat_km = (
-            df_dvmax ** 2 * var_vmax
-            + df_dkm ** 2 * var_km
-            + 2.0 * df_dvmax * df_dkm * cov_vmax_km
+        df_dvmax**2 * var_vmax
+        + df_dkm**2 * var_km
+        + 2.0 * df_dvmax * df_dkm * cov_vmax_km
     )
     kcat_km_se_M = float(np.sqrt(max(var_kcat_km, 0.0)))  # clamp numerical negatives
     return float(kcat_km_M), kcat_km_se_M

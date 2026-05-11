@@ -89,11 +89,14 @@ def hill_equation(s: np.ndarray, vmax: float, k_half: float, n: float) -> np.nda
     Returns:
         Reaction velocity array in the same units as vmax.
     """
-    return (vmax * s ** n) / (k_half ** n + s ** n)
+    return (vmax * s**n) / (k_half**n + s**n)
 
 
 def threshold_michaelis_menten(
-    s: np.ndarray, vmax: float, km: float, s0: float,
+    s: np.ndarray,
+    vmax: float,
+    km: float,
+    s0: float,
 ) -> np.ndarray:
     """Computes reaction velocity using a Michaelis-Menten model with a dead-zone threshold.
 
@@ -117,7 +120,10 @@ def threshold_michaelis_menten(
 
 
 def substrate_inhibition(
-    s: np.ndarray, vmax: float, km: float, ki: float,
+    s: np.ndarray,
+    vmax: float,
+    km: float,
+    ki: float,
 ) -> np.ndarray:
     """Computes reaction velocity under substrate inhibition.
 
@@ -138,7 +144,7 @@ def substrate_inhibition(
     Returns:
         Reaction velocity array in the same units as vmax.
     """
-    return (vmax * s) / (km + s + (s ** 2) / ki)
+    return (vmax * s) / (km + s + (s**2) / ki)
 
 
 def lineweaver_burk_transform(
@@ -390,7 +396,12 @@ def fit_michaelis_menten(
     vmax_guess = vmax_init if vmax_init is not None else float(np.max(v))
     km_guess = km_init if km_init is not None else float(np.median(s))
     return fit_model(
-        michaelis_menten, s, v, [vmax_guess, km_guess], sigma=sigma, model_type="mm",
+        michaelis_menten,
+        s,
+        v,
+        [vmax_guess, km_guess],
+        sigma=sigma,
+        model_type="mm",
     )
 
 
@@ -527,7 +538,7 @@ def fit_lineweaver_burk(s: np.ndarray, v: np.ndarray) -> FitResult:
     """
     s_inv, v_inv = lineweaver_burk_transform(s, v)
     slope, intercept, r_value, _, std_err = linregress(s_inv, v_inv)
-    r2 = r_value ** 2
+    r2 = r_value**2
     vmax = 1.0 / intercept if intercept != 0 else np.nan
     km = slope * vmax if not np.isnan(vmax) else np.nan
     # LB std errors live in reciprocal space and do not map cleanly to parameter

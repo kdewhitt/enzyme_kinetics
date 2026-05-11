@@ -260,7 +260,7 @@ class KineticAnalyzer:
 
             # Convert area → µM concentration, then divide by rxn_time for velocity
             v_um = (
-                    np.asarray(cal.area_to_conc(mean_signal)) / self.reaction_time_seconds
+                np.asarray(cal.area_to_conc(mean_signal)) / self.reaction_time_seconds
             )
 
             # FIX 4: precise vs. simplified SEM scaling
@@ -269,12 +269,14 @@ class KineticAnalyzer:
                 v_sem_um = np.array(
                     [
                         cal.area_to_conc_with_error(
-                            float(area), float(area_se * self.reaction_time_seconds),
+                            float(area),
+                            float(area_se * self.reaction_time_seconds),
                         )[1]
                         / self.reaction_time_seconds
                         for area, area_se in zip(
-                        mean_signal, v_sem_raw * self.reaction_time_seconds,
-                    )
+                            mean_signal,
+                            v_sem_raw * self.reaction_time_seconds,
+                        )
                     ],
                 )
             else:
@@ -302,7 +304,9 @@ class KineticAnalyzer:
         self.results = recalculated
         return self
 
-    def plot(self, dest: Path, *, overwrite: bool = False) -> Self:
+    def plot(
+        self, dest: Path, *, is_calibrated: bool = False, overwrite: bool = False
+    ) -> Self:
         """Generates and saves all kinetic plots for the current results.
 
         Constructs a KineticPlots instance and renders the Michaelis-Menten curves,
@@ -313,6 +317,8 @@ class KineticAnalyzer:
             dest: Base file path to use for writing plot files. A specific suffix
                 will be appended to the path stem to identify each particular
                 plot created.
+            is_calibrated: If True, plots are generated assuming calibrated data. If False,
+                plots are generated assuming uncorrected "raw" data. Defaults to False.
             overwrite: If True, overwrites existing plot files at dest. If False,
                 existing files are preserved and new files receive a unique suffix.
                 Defaults to False.
@@ -379,6 +385,7 @@ class KineticAnalyzer:
 # ---------------------------------------------------------------------
 # Batch analysis helper - unsure of its utility given KineticAnalyzer
 # ---------------------------------------------------------------------
+
 
 def analyze_peaks(
     substrate: str,

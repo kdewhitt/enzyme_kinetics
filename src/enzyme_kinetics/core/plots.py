@@ -244,7 +244,11 @@ class KineticPlots:
             s_inv, v_inv = lineweaver_burk_transform(s, v)
 
             ax.scatter(
-                s_inv, v_inv, color="steelblue", zorder=3, label="Data (1/V vs 1/[S])",
+                s_inv,
+                v_inv,
+                color="steelblue",
+                zorder=3,
+                label="Data (1/V vs 1/[S])",
             )
 
             # Fit line over observed 1/[S] range
@@ -414,7 +418,11 @@ class KineticPlots:
         ax_km, ax_vmax, ax_kcat, ax_kcat_km = axes.flatten()
 
         def _bar(
-            ax: plt.Axes, vals: list[float], errs: list[float], title: str, ylabel: str,
+            ax: plt.Axes,
+            vals: list[float],
+            errs: list[float],
+            title: str,
+            ylabel: str,
         ) -> None:
             colors = ["steelblue" if not np.isnan(v) else "lightgrey" for v in vals]
             safe_errs = [e if not np.isnan(e) else 0.0 for e in errs]
