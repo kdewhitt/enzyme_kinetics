@@ -14,14 +14,14 @@ dependencies = [
     "numpy>=2.4.4",
     "pandas>=3.0.2",
     "pydantic>=2.13.4",
-    "pylint>=4.0.5",
     "scipy>=1.17.1",
     "scipy-stubs>=1.17.1.4",
     "tyro>=1.0.13",
 ]
 
 [project.scripts]
-enzyme-kinetics = "enzyme_kinetics.main:main"
+analyze = "enzyme_kinetics.main:main"
+calibrate = "enzyme_kinetics.calibrate:main"
 
 [build-system]
 requires = ["uv_build>=0.11.11,<0.12.0"]
@@ -31,26 +31,27 @@ build-backend = "uv_build"
 logurich = { git = "https://github.com/kdewhitt/logurich.git" }
 kgdlibs = { git = "https://github.com/kdewhitt/kgdlibs.git" }
 
+[tool.ruff]
+extend-select = ["COM812"]
+
 [tool.ruff.lint]
 extend-select = [
-  "UP",  # pyupgrade
-  "D",   # pydocstyle
+    "UP", # pyupgrade
+    "D", # pydocstyle
 ]
 
 [tool.ruff.lint.pydocstyle]
 convention = "google"
 
+[tool.ruff.format]
+exclude = ["tests"]
+skip-magic-trailing-comma = true
+
 [dependency-groups]
 dev = [
+    "icecream>=2.2.0",
+    "pylint>=4.0.5",
     "pytest>=9.0.3",
-]
-docs = [
     "ruff>=0.15.12",
     "ty>=0.0.35",
-]
-plotting = [
-    "matplotlib>=3.10.9",
-    "scipy>=1.17.1",
-    "scipy-stubs>=1.17.1.4",
-    "seaborn>=0.13.2",
 ]

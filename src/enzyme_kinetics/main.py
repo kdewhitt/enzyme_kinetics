@@ -1,5 +1,7 @@
 """CLI entrypoint for the enzyme kinetics analysis pipeline."""
 
+from __future__ import annotations
+
 import os
 from pathlib import Path
 
@@ -154,9 +156,7 @@ def run_enzyme_kinetic_analysis_pipeline(args: KineticArgs) -> None:
     # 7. Plot and save results
     base_dest_path = args.target_dir / args.path.name
     analyzer.export_csv(base_dest_path, overwrite=args.overwrite)
-    analyzer.plot(
-        base_dest_path, is_calibrated=args.is_calibrated, overwrite=args.overwrite
-    )
+    analyzer.plot(base_dest_path, is_calibrated=args.is_calibrated, overwrite=args.overwrite)
 
     _logger.info("Analysis complete.")
 

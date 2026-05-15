@@ -27,6 +27,7 @@ from pathlib import Path
 
 import matplotlib.pyplot as plt
 import numpy as np
+import pandas as pd
 from logurich import RichLogAdapter
 from scipy.optimize import curve_fit
 
@@ -41,6 +42,9 @@ __all__ = [
 ]
 
 _logger = RichLogAdapter(component=__name__)
+
+
+# TODO: Update docstrings
 
 
 # ---------------------------------------------------------------------
@@ -149,7 +153,7 @@ class Calibration:
         """
         conc = float(self.area_to_conc(area))
         dc_da = 1.0 / self.slope
-        dc_ds = -(area - self.intercept) / (self.slope**2)
+        dc_ds = -(area - self.intercept) / (self.slope ** 2)
         dc_di = -1.0 / self.slope  # FIX 2: intercept term
         conc_se = float(
             np.sqrt(
@@ -172,47 +176,46 @@ def fit_calibration(
     *,
     sigma: np.ndarray | None = None,
 ) -> Calibration:
-    """Fits a linear calibration curve to HPLC standard data.
+    """Fits a linear calibration curve to HPLC standard data."""
 
-    Fits the model peak_area = slope × [CoA] + intercept using
-    scipy.optimize.curve_fit with absolute_sigma=True. When sigma is provided
-    and contains non-zero values, weighted least squares is used; otherwise
-    fitting reduces to OLS.
+    concentrations = np.asarray(pd.to_numeric(concentrations, errors="coerce"), dtype=float)
+    peak_areas = np.asarray(pd.to_numeric(peak_areas, errors="coerce"), dtype=float)
 
-    Args:
-        concentrations: Known CoA concentrations of calibration standards in µM.
-        peak_areas: Measured HPLC peak areas corresponding to each standard
-            in area units.
-        sigma: Optional per-point standard errors on peak_areas in area units.
-            If None or all-zero, unweighted fitting is used. Defaults to None.
+    if sigma is not None:
+        sigma = np.asarray(pd.to_numeric(sigma, errors="coerce"), dtype=float)
 
-    Returns:
-        A fitted Calibration instance with slope, intercept, their standard
-        errors, R², RMSE in area units, n_points, and conc_range in µM.
+    valid = np.isfinite(concentrations) & np.isfinite(peak_areas)
+    if sigma is not None:
+        valid &= np.isfinite(sigma)
 
-    Raises:
-        RuntimeError: If curve_fit fails to converge.
-        ValueError: If concentrations and peak_areas have incompatible shapes.
-    """
+    concentrations = concentrations[valid]
+    peak_areas = peak_areas[valid]
+    sigma = sigma[valid] if sigma is not None else None
+
+    if len(concentrations) < 2:
+        raise ValueError("At least two valid calibration points are required.")
 
     def _linear(x: np.ndarray, slope: float, intercept: float) -> np.ndarray:
         return slope * x + intercept
 
     effective_sigma = sigma if sigma is not None and np.any(sigma > 0) else None
+
     popt, pcov = curve_fit(
         _linear,
         concentrations,
         peak_areas,
         sigma=effective_sigma,
-        absolute_sigma=True,
+        absolute_sigma=effective_sigma is not None,
     )
+
     perr = np.sqrt(np.diag(pcov))
     predicted = _linear(concentrations, *popt)
+
     return Calibration(
-        slope=popt[0],
-        slope_se=perr[0],
-        intercept=popt[1],
-        intercept_se=perr[1],
+        slope=float(popt[0]),
+        slope_se=float(perr[0]),
+        intercept=float(popt[1]),
+        intercept_se=float(perr[1]),
         r_squared=r_squared(peak_areas, predicted),
         rmse=float(np.sqrt(np.mean((peak_areas - predicted) ** 2))),
         n_points=len(concentrations),
@@ -220,12 +223,67 @@ def fit_calibration(
     )
 
 
+#
+# def fit_calibration(
+#     concentrations: np.ndarray,
+#     peak_areas: np.ndarray,
+#     *,
+#     sigma: np.ndarray | None = None,
+# ) -> Calibration:
+#     """Fits a linear calibration curve to HPLC standard data.
+#
+#     Fits the model peak_area = slope × [CoA] + intercept using
+#     scipy.optimize.curve_fit with absolute_sigma=True. When sigma is provided
+#     and contains non-zero values, weighted least squares is used; otherwise
+#     fitting reduces to OLS.
+#
+#     Args:
+#         concentrations: Known CoA concentrations of calibration standards in µM.
+#         peak_areas: Measured HPLC peak areas corresponding to each standard
+#             in area units.
+#         sigma: Optional per-point standard errors on peak_areas in area units.
+#             If None or all-zero, unweighted fitting is used. Defaults to None.
+#
+#     Returns:
+#         A fitted Calibration instance with slope, intercept, their standard
+#         errors, R², RMSE in area units, n_points, and conc_range in µM.
+#
+#     Raises:
+#         RuntimeError: If curve_fit fails to converge.
+#         ValueError: If concentrations and peak_areas have incompatible shapes.
+#     """
+#
+#     def _linear(x: np.ndarray, slope: float, intercept: float) -> np.ndarray:
+#         return slope * x + intercept
+#
+#     effective_sigma = sigma if sigma is not None and np.any(sigma > 0) else None
+#     popt, pcov = curve_fit(
+#         _linear,
+#         concentrations,
+#         peak_areas,
+#         sigma=effective_sigma,
+#         absolute_sigma=True,
+#     )
+#     perr = np.sqrt(np.diag(pcov))
+#     predicted = _linear(concentrations, *popt)
+#     return Calibration(
+#         slope=popt[0],
+#         slope_se=perr[0],
+#         intercept=popt[1],
+#         intercept_se=perr[1],
+#         r_squared=r_squared(peak_areas, predicted),
+#         rmse=float(np.sqrt(np.mean((peak_areas - predicted) ** 2))),
+#         n_points=len(concentrations),
+#         conc_range=(float(concentrations.min()), float(concentrations.max())),
+#     )
+
+
 # ---------------------------------------------------------------------
 # Legacy
 # ---------------------------------------------------------------------
 
 
-def save_calibration(cal: Calibration, path: Path, nice: bool = False) -> None:
+def save_calibration(cal: Calibration, peak_id: str, path: Path, nice: bool = False) -> None:
     """Saves calibration parameters to a file in JSON or human-readable format.
 
     Two output modes are available. When nice is False (default), writes a
@@ -258,7 +316,7 @@ def save_calibration(cal: Calibration, path: Path, nice: bool = False) -> None:
     if nice:
         with open(path, "w") as f:
             f.write("=" * 80 + "\n")
-            f.write("HPLC CALIBRATION PARAMETERS\n")
+            f.write(f"HPLC CALIBRATION PARAMETERS | {peak_id.upper()}\n")
             f.write("=" * 80 + "\n\n")
 
             f.write("LINEAR MODEL:\n")
