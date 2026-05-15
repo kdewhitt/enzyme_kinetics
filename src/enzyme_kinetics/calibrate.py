@@ -45,7 +45,7 @@ class CalibrationArgs(BaseModel):
     @field_validator("path", "outfile", mode="before")
     @classmethod
     def _resolve_paths(cls, value) -> Path:
-        """Resolve paths to absolute paths and expand user-home."""
+        """Resolves paths to absolute paths and expands user-home."""
         return Path(value).expanduser().resolve()
 
 
