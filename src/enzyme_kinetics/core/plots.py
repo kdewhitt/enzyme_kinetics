@@ -27,18 +27,20 @@ Typical usage example:
 from __future__ import annotations
 
 from pathlib import Path
-from typing import Any, Self
+from typing import Any, Self, TYPE_CHECKING
 
 import matplotlib.pyplot as plt
 import numpy as np
-import pandas as pd
 from kgdlibs.pathtools import PathBuilder
 from logurich import RichLogAdapter
 
-from .calibration import Calibration
-from .derive import KineticConstants
 from .models import lineweaver_burk_transform
 from .preprocess import extract_peak_data
+
+if TYPE_CHECKING:
+    from .derive import KineticConstants
+    from .calibration import Calibration
+    import pandas as pd
 
 __all__ = ["KineticPlots"]
 
@@ -103,6 +105,7 @@ class KineticPlots:
             calibrated: If True, velocity axis labels use "µM min⁻¹" to
                 reflect that calibrated concentration velocities are plotted.
                 If False, labels use "area min⁻¹". Defaults to False.
+            calibrations: Optional mapping of peak_id to Calibration objects.
         """
         self.path = Path(path)
         self.df = data
@@ -427,7 +430,7 @@ class KineticPlots:
         kcat_km_errs = [kc.kcat_km_std_M for kc in kcs]
 
         x = np.arange(len(peaks))
-        bar_kw: dict[str, Any] = dict(capsize=4, alpha=0.8, width=0.6)
+        bar_kw: dict[str, Any] = {"capsize": 4, "alpha": 0.8, "width": 0.6}
 
         fig, axes = plt.subplots(2, 2, figsize=(12, 8))
         ax_km, ax_vmax, ax_kcat, ax_kcat_km = axes.flatten()

@@ -8,14 +8,7 @@ repos:
     rev: 0.11.14
     hooks:
       - id: uv-sync
-      # Compile requirements
-      - id: pip-compile
-        name: pip-compile requirements.in
-        args: [ requirements.in, -o, requirements.txt ]
-      - id: pip-compile
-        name: pip-compile requirements-dev.in
-        args: [ requirements-dev.in, -o, requirements-dev.txt ]
-        files: ^requirements-dev\.(in|txt)$
+
   - repo: https://github.com/astral-sh/ruff-pre-commit
     rev: v0.15.8
     hooks:

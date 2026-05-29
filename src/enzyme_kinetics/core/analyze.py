@@ -22,19 +22,22 @@ Typical usage example:
 
 from __future__ import annotations
 
-from pathlib import Path
-from typing import Self
+import contextlib
+from typing import Self, TYPE_CHECKING
 
 import numpy as np
 import pandas as pd
 from kgdlibs.pathtools import PathBuilder
 from logurich import RichLogAdapter
 
-from .calibration import Calibration
 from .derive import derive_constants, KineticConstants
 from .models import fit_hill, fit_lineweaver_burk, fit_michaelis_menten, FitResult
 from .plots import KineticPlots
 from .preprocess import extract_peak_data
+
+if TYPE_CHECKING:
+    from .calibration import Calibration
+    from pathlib import Path
 
 __all__ = ["analyze_peaks", "KineticAnalyzer"]
 
@@ -294,7 +297,7 @@ class KineticAnalyzer:
                         / self.reaction_time_seconds
                         for area, area_std in zip(
                         mean_signal,
-                        v_std_raw,
+                        v_std_raw, strict=False,
                     )
                     ],
                 )
@@ -468,10 +471,8 @@ def analyze_peaks(
             mm_fit = fit_michaelis_menten(s, v, sigma=sigma)
             lb_fit = None
             if fit_lb:
-                try:
+                with contextlib.suppress(Exception):
                     lb_fit = fit_lineweaver_burk(s, v)
-                except Exception:
-                    pass
             results[peak_id] = derive_constants(
                 substrate,
                 peak_id,

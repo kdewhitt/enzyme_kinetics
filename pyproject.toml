@@ -1,7 +1,7 @@
 [project]
 name = "enzyme-kinetics"
 version = "0.1.0"
-description = "Add your description here"
+description = "Compute Michaelis-Menten enzyme kinetics."
 readme = "README.md"
 authors = [
     { name = "Kristofer Gonzalez-DeWhitt", email = "k.gonzalez.dewhitt@gmail.com" }
@@ -27,31 +27,57 @@ calibrate = "enzyme_kinetics.calibrate:main"
 requires = ["uv_build>=0.11.11,<0.12.0"]
 build-backend = "uv_build"
 
-[tool.uv.sources]
-logurich = { git = "https://github.com/kdewhitt/logurich.git" }
-kgdlibs = { git = "https://github.com/kdewhitt/kgdlibs.git" }
+[tool.uv]
+link-mode = "copy"
 
 [tool.ruff]
-extend-select = ["COM812"]
+line-length = 99
+exclude = [
+    ".venv",
+    "build",
+    "dist",
+    "legacy",
+    "tests",
+]
 
 [tool.ruff.lint]
 extend-select = [
-    "UP", # pyupgrade
+    "B", # bugbear
+    "C4", # comprehensions
+    "COM812", # enforce trailing commas
     "D", # pydocstyle
+    "E", # pycodestyle errors
+    "F", # pyflakes
+    "SIM", # simplify
+    "TCH", # type-checking imports
+    "UP", # pyupgrade
+    "W", # pycodestyle warnings
 ]
+
+ignore = ["D203", "D213"]  # common conflicts
+
+per-file-ignores = {
+    "tests/*" = ["S101"], # allow assert in tests
+    "scripts/*" = ["T201"], # allow print()
+}
 
 [tool.ruff.lint.pydocstyle]
 convention = "google"
 
 [tool.ruff.format]
-exclude = ["tests"]
-skip-magic-trailing-comma = true
+quote-style = "double"
+indent-style = "space"
+skip-magic-trailing-comma = false  # allow trailing commas
+
+[tool.uv.sources]
+kgdlibs = { git = "https://github.com/kdewhitt/kgdlibs.git" }
+logurich = { git = "https://github.com/kdewhitt/logurich.git" }
 
 [dependency-groups]
 dev = [
     "icecream>=2.2.0",
     "pylint>=4.0.5",
     "pytest>=9.0.3",
-    "ruff>=0.15.12",
-    "ty>=0.0.35",
+    "ruff>=0.15.14",
+    "ty>=0.0.39",
 ]

@@ -1,5 +1,13 @@
+"""Core module for modeling and plotting enzyme-catalyzed reactions."""
+
 from .analyze import KineticAnalyzer
-from .calibration import Calibration, fit_calibration, load_calibration, plot_calibration, save_calibration
+from .calibration import (
+    Calibration,
+    fit_calibration,
+    load_calibration,
+    plot_calibration,
+    save_calibration,
+)
 from .compounds import canonicalize_peak_ids, FlexPeakPrefixes
 from .derive import derive_constants, KineticConstants
 from .io import load_plottable_data

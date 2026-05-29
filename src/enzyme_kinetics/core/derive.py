@@ -22,12 +22,13 @@ Typical usage example:
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Any
+from typing import Any, TYPE_CHECKING
 
 import numpy as np
 from logurich import RichLogAdapter
 
-from .models import FitResult
+if TYPE_CHECKING:
+    from .models import FitResult
 
 __all__ = ["derive_constants", "KineticConstants"]
 

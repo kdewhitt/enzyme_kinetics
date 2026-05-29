@@ -115,6 +115,7 @@ class KineticArgs(BaseModel):
     @computed_field
     @property
     def reaction_time_seconds(self) -> float:
+        """Reaction duration in seconds."""
         return self.rxn_time * 60
 
 
@@ -197,7 +198,11 @@ def run_enzyme_kinetic_analysis_pipeline(args: KineticArgs) -> None:
     )
 
 
-def apply_calibration(path: Path, peak_prefixes: frozenset[str] | None, analyzer: KineticAnalyzer) -> KineticAnalyzer:
+def apply_calibration(
+    path: Path,
+    peak_prefixes: frozenset[str] | None,
+    analyzer: KineticAnalyzer,
+) -> KineticAnalyzer:
     """Applies a fitted Calibration object to the KineticAnalyzer."""
     # 1. Load data
     df = load_plottable_data(path, sanitize=True, drop_indexlike=True)

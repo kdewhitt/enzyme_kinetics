@@ -1,3 +1,5 @@
+"""CLI entrypoint for the calibration pipeline."""
+
 from __future__ import annotations
 
 import os
@@ -137,7 +139,12 @@ def run_calibration_pipeline(args: CalibrationArgs) -> None:
 
         # 7. Plot and save results
         save_calibration(model, peak_id, out_path.with_suffix(".txt"), nice=args.pretty)
-        plot_calibration(model, sub_df["substrate_conc"], sub_df["mean"], output_path=out_path.with_suffix(".png"))
+        plot_calibration(
+            model,
+            sub_df["substrate_conc"],
+            sub_df["mean"],
+            output_path=out_path.with_suffix(".png"),
+        )
 
     _logger.info("Analysis complete.")
 

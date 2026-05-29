@@ -20,14 +20,16 @@ Typical usage example:
 
 from __future__ import annotations
 
-from collections.abc import Callable
 from dataclasses import dataclass, field
-from typing import Any
+from typing import Any, TYPE_CHECKING
 
 import numpy as np
 from logurich import RichLogAdapter
 from scipy.optimize import curve_fit
 from scipy.stats import linregress
+
+if TYPE_CHECKING:
+    from collections.abc import Callable
 
 _logger = RichLogAdapter(component=__name__)
 
@@ -215,7 +217,10 @@ class FitResult:
 
     @property
     def km(self) -> float:
-        """Michaelis constant Km in µM (popt[1]); k_half for Hill fits (half-saturation, not Km when n≠1)."""
+        """Michaelis constant Km in µM (popt[1]).
+
+        Note: Corresponds to k_half for Hill fits (half-saturation, not Km when n≠1).
+        """
         return self.popt[1]
 
     @property
@@ -225,7 +230,10 @@ class FitResult:
 
     @property
     def k_half(self) -> float:
-        """Half-saturation constant k_half in µM from a Hill fit (popt[1]). Raises if model is not "hill"."""
+        """Half-saturation constant k_half in µM from a Hill fit (popt[1]).
+
+        Raises if model is not "hill".
+        """
         if self.model_type != "hill":
             raise AttributeError(
                 f"k_half is only defined for Hill fits; this is '{self.model_type}'",
@@ -234,7 +242,10 @@ class FitResult:
 
     @property
     def k_half_std(self) -> float:
-        """Standard deviation of k_half in µM from a Hill fit. Raises if model is not "hill"."""
+        """Standard deviation of k_half in µM from a Hill fit.
+
+        Raises if model is not "hill".
+        """
         if self.model_type != "hill":
             raise AttributeError(
                 f"k_half_std is only defined for Hill fits; this is '{self.model_type}'",
@@ -243,7 +254,10 @@ class FitResult:
 
     @property
     def hill_n(self) -> float:
-        """Hill cooperativity coefficient n (dimensionless) from popt[2]. Raises if model is not "hill"."""
+        """Hill cooperativity coefficient n (dimensionless) from popt[2].
+
+        Raises if model is not "hill".
+        """
         if self.model_type != "hill":
             raise AttributeError(
                 f"hill_n is only defined for Hill fits; this is '{self.model_type}'",
@@ -252,7 +266,10 @@ class FitResult:
 
     @property
     def hill_n_std(self) -> float:
-        """Standard deviation of the Hill cooperativity coefficient n (dimensionless). Raises if model is not "hill"."""
+        """Standard deviation of the Hill cooperativity coefficient n (dimensionless).
+
+        Raises if model is not "hill".
+        """
         if self.model_type != "hill":
             raise AttributeError(
                 f"hill_n_std is only defined for Hill fits; this is '{self.model_type}'",
@@ -261,7 +278,10 @@ class FitResult:
 
     @property
     def ki(self) -> float:
-        """Substrate inhibition constant Ki in µM from popt[2]. Raises if model is not "si"."""
+        """Substrate inhibition constant Ki in µM from popt[2].
+
+        Raises if model is not "si".
+        """
         if self.model_type != "si":
             raise AttributeError(
                 f"ki is only defined for substrate-inhibition fits; this is '{self.model_type}'",
@@ -270,10 +290,14 @@ class FitResult:
 
     @property
     def ki_std(self) -> float:
-        """Standard deviation of Ki in µM. Raises if model is not "si"."""
+        """Standard deviation of Ki in µM.
+
+        Raises if model is not "si".
+        """
         if self.model_type != "si":
             raise AttributeError(
-                f"ki_std is only defined for substrate-inhibition fits; this is '{self.model_type}'",
+                f"ki_std is only defined for substrate-inhibition fits; "
+                f"this is '{self.model_type}'",
             )
         return self.perr[2]
 

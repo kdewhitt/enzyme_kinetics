@@ -134,8 +134,6 @@ class Compounds(StrEnum):
     OA = "OA"
     OLV = "OLV"
 
-    # VOID_PEAK = "VOID_PEAK"
-
     @classmethod
     def resolve(cls, label: str | Compounds) -> Compounds:
         """Resolves a string or Compounds instance to a canonical Compounds member.
@@ -297,7 +295,7 @@ CATEGORICAL_ORDER_EXTENDED: Final[tuple[str, ...]] = (
         for compound in CATEGORICAL_ORDER
     ),
 )
-"""Extended categorical ordering including all prefix-compound combinations after base compounds."""
+"""Extended categorical order including all prefix-compound combinations after base compounds."""
 
 
 # ---------------------------------------------------------------------

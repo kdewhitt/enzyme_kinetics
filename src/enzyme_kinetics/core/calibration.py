@@ -23,7 +23,7 @@ from __future__ import annotations
 
 import json
 from dataclasses import dataclass
-from pathlib import Path
+from typing import TYPE_CHECKING
 
 import matplotlib.pyplot as plt
 import numpy as np
@@ -32,6 +32,9 @@ from logurich import RichLogAdapter
 from scipy.optimize import curve_fit
 
 from .models import r_squared
+
+if TYPE_CHECKING:
+    from pathlib import Path
 
 __all__ = [
     "Calibration",
@@ -363,7 +366,9 @@ def save_calibration(cal: Calibration, peak_id: str, path: Path, nice: bool = Fa
             f.write(f"  Conc range:   {cal.conc_range[0]:.2f}–{cal.conc_range[1]:.2f} µM\n\n")
 
             f.write("INVERSE FUNCTION:\n")
-            f.write(f"  [concentration] = (peak_area - {cal.intercept:.10f}) / {cal.slope:.10f}\n\n")
+            f.write(
+                f"  [concentration] = (peak_area - {cal.intercept:.10f}) / {cal.slope:.10f}\n\n",
+            )
 
             f.write("PYTHON CODE:\n")
             f.write("```python\n")
@@ -547,7 +552,8 @@ CalibrationCurve held the data internally as instance state.
 #
 #         ax.set_xlabel('[CoA] (µM)', fontsize=12, fontweight='bold')
 #         ax.set_ylabel('Peak Area', fontsize=12, fontweight='bold')
-#         ax.set_title(f'Calibration Curve (R² = {self.params.r2:.6f})', fontsize=13, fontweight='bold')
+#         ax.set_title(f'Calibration Curve (R² = {self.params.r2:.6f})', fontsize=13,
+#               fontweight='bold')
 #         ax.legend(fontsize=11)
 #         ax.grid(True, alpha=0.3)
 #
