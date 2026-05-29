@@ -35,6 +35,7 @@ import pandas as pd
 from kgdlibs.pathtools import PathBuilder
 from logurich import RichLogAdapter
 
+from .calibration import Calibration
 from .derive import KineticConstants
 from .models import lineweaver_burk_transform
 from .preprocess import extract_peak_data
@@ -82,6 +83,7 @@ class KineticPlots:
         reaction_time_seconds: float,
         overwrite: bool = False,
         calibrated: bool = False,
+        calibrations: dict[str, Calibration] | None = None,
     ) -> None:
         """Initializes KineticPlots with a base path, data, and analysis results.
 
@@ -108,6 +110,7 @@ class KineticPlots:
         self.reaction_time_seconds = reaction_time_seconds
         self.overwrite = overwrite
         self.calibrated = calibrated
+        self.calibrations = calibrations or {}
 
     def _make_builder(self) -> PathBuilder:
         """Returns a PathBuilder seeded with the acquisition date and destination path."""
@@ -151,11 +154,16 @@ class KineticPlots:
                 ax.axis("off")
                 continue
 
-            s, v, v_sem, _ = data
+            s, v, v_std, _ = data
+            if self.calibrated and peak_id in self.calibrations:
+                cal = self.calibrations[peak_id]
+                mean_signal = v * self.reaction_time_seconds
+                v = np.asarray(cal.area_to_conc(mean_signal)) / self.reaction_time_seconds
+                v_std = v_std / cal.slope
             ax.errorbar(
                 s,
                 v,
-                yerr=v_sem,
+                yerr=v_std,
                 fmt="o",
                 color="steelblue",
                 alpha=0.7,
@@ -172,14 +180,14 @@ class KineticPlots:
 
             if kc.fit.km > 1000:
                 label = (
-                    f"Vmax={kc.fit.vmax:.2g}±{kc.fit.vmax_se:.2g}\n"
-                    f"{km_label}={kc.fit.km:.2g}±{kc.fit.km_se:.2g}\n"
+                    f"Vmax={kc.fit.vmax:.2g}±{kc.fit.vmax_std:.2g}\n"
+                    f"{km_label}={kc.fit.km:.2g}±{kc.fit.km_std:.2g}\n"
                     f"R²={kc.fit.r_squared:.4g}"
                 )
             else:
                 label = (
-                    f"Vmax={kc.fit.vmax:.2f}±{kc.fit.vmax_se:.2f}\n"
-                    f"{km_label}={kc.fit.km:.2f}±{kc.fit.km_se:.2f}\n"
+                    f"Vmax={kc.fit.vmax:.2f}±{kc.fit.vmax_std:.2f}\n"
+                    f"{km_label}={kc.fit.km:.2f}±{kc.fit.km_std:.2f}\n"
                     f"R²={kc.fit.r_squared:.4f}"
                 )
 
@@ -189,7 +197,7 @@ class KineticPlots:
             ax.set_xlabel(f"Substrate Concentration [{kc.substrate}] (µM)")
             ax.set_ylabel(
                 # "Velocity (µM min⁻¹)",
-                "Velocity (µM min⁻¹)" if self.calibrated else "Velocity (area min⁻¹)"
+                "Velocity (µM min⁻¹)" if self.calibrated else "Velocity (area min⁻¹)",
             )
 
         for j in range(len(peaks), len(axes)):
@@ -283,6 +291,7 @@ class KineticPlots:
                     fontsize=7,
                     color="orange",
                     ha="right",
+                    rotation=90,
                 )
 
             ax.set_title(_LABEL_MAP.get(peak_id, peak_id), fontweight="bold")
@@ -337,7 +346,12 @@ class KineticPlots:
                 ax.set_visible(False)
                 continue
 
-            s, v, v_sem, _ = data
+            s, v, v_std, _ = data
+            if self.calibrated and peak_id in self.calibrations:
+                cal = self.calibrations[peak_id]
+                mean_signal = v * self.reaction_time_seconds
+                v = np.asarray(cal.area_to_conc(mean_signal)) / self.reaction_time_seconds
+                v_std = v_std / cal.slope
             v_pred = kc.fit.predict(s)
             residuals = v - v_pred
 
@@ -345,7 +359,7 @@ class KineticPlots:
             ax.errorbar(
                 s,
                 residuals,
-                yerr=v_sem,
+                yerr=v_std,
                 fmt="o",
                 color="steelblue",
                 alpha=0.7,
@@ -402,15 +416,15 @@ class KineticPlots:
         kcs = [self.results[p] for p in peaks]
 
         km_vals = [kc.fit.km for kc in kcs]
-        km_errs = [kc.fit.km_se for kc in kcs]
+        km_errs = [kc.fit.km_std for kc in kcs]
         vmax_vals = [kc.fit.vmax for kc in kcs]
-        vmax_errs = [kc.fit.vmax_se for kc in kcs]
+        vmax_errs = [kc.fit.vmax_std for kc in kcs]
 
         # kcat and kcat/Km may be nan if calibration not applied; handled explicitly
         kcat_vals = [kc.kcat for kc in kcs]
-        kcat_errs = [kc.kcat_se for kc in kcs]
+        kcat_errs = [kc.kcat_std for kc in kcs]
         kcat_km_vals = [kc.kcat_km_M for kc in kcs]
-        kcat_km_errs = [kc.kcat_km_se_M for kc in kcs]
+        kcat_km_errs = [kc.kcat_km_std_M for kc in kcs]
 
         x = np.arange(len(peaks))
         bar_kw: dict[str, Any] = dict(capsize=4, alpha=0.8, width=0.6)
@@ -426,7 +440,7 @@ class KineticPlots:
             ylabel: str,
         ) -> None:
             colors = ["steelblue" if not np.isnan(v) else "lightgrey" for v in vals]
-            safe_errs = [e if not np.isnan(e) else 0.0 for e in errs]
+            safe_errs = [e if np.isfinite(e) else 0.0 for e in errs]
             safe_vals = [v if not np.isnan(v) else 0.0 for v in vals]
             ax.bar(x, safe_vals, yerr=safe_errs, color=colors, **bar_kw)
             ax.set_xticks(x)

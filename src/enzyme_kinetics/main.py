@@ -4,12 +4,12 @@ from __future__ import annotations
 
 import os
 from pathlib import Path
+from typing import Annotated
 
 import tyro
 from logurich import configure_richloguru, RichLogAdapter
 from pydantic import BaseModel, computed_field, ConfigDict, Field, field_validator
 from rich.console import Console
-from tyro.conf import Positional
 
 from enzyme_kinetics.core import (
     canonicalize_peak_ids,
@@ -17,6 +17,7 @@ from enzyme_kinetics.core import (
     KineticAnalyzer,
     load_plottable_data,
 )
+from enzyme_kinetics.core.calibration import fit_calibration
 
 configure_richloguru(level="INFO")
 _logger = RichLogAdapter(component=__name__)
@@ -50,6 +51,12 @@ class KineticArgs(BaseModel):
         path: Path to the pre-aggregated PeakAnalyzer CSV file to process.
         target_dir: Destination directory where output CSV and plot files
             are written.
+        calibration_path: Optional path to a fitted Calibration JSON file
+            produced by fit_calibration(). If provided, apply_calibration()
+            is called after fit() to convert velocities to µM/s and produce
+            physically meaningful kcat (s⁻¹) and kcat/Km (M⁻¹·s⁻¹) values.
+            If None, kcat and kcat/Km are computed from raw area velocities
+            and carry non-physical units. Defaults to None.
         enzyme_conc_um: Total enzyme concentration in µM used to compute
             kcat = Vmax / [E]. Defaults to 12.25.
         rxn_time: Reaction duration in minutes. Converted to seconds
@@ -70,10 +77,17 @@ class KineticArgs(BaseModel):
             model serialization. Defaults to False.
     """
 
-    model_config = ConfigDict(extra="ignore", frozen=True, arbitrary_types_allowed=True)
+    model_config = ConfigDict(
+        extra="ignore",
+        frozen=True,
+        arbitrary_types_allowed=True,
+        str_strip_whitespace=True,
+        validate_default=True,
+    )
 
-    path: Positional[Path]
-    target_dir: Positional[Path]
+    path: Annotated[Path, tyro.conf.Positional]
+    target_dir: Annotated[Path, tyro.conf.Positional]
+    calibration_path: Path | None = None
 
     enzyme_conc_um: float = 12.25
     rxn_time: float = 180.0
@@ -91,6 +105,12 @@ class KineticArgs(BaseModel):
     def _resolve_paths(cls, value) -> Path:
         """Resolves paths to absolute paths and expands user-home."""
         return Path(value).expanduser().resolve()
+
+    @field_validator("calibration_path", mode="before")
+    @classmethod
+    def _resolve_calibration_path(cls, value) -> Path | None:
+        """Resolves calibration path to absolute path if provided."""
+        return Path(value).expanduser().resolve() if value is not None else None
 
     @computed_field
     @property
@@ -146,16 +166,25 @@ def run_enzyme_kinetic_analysis_pipeline(args: KineticArgs) -> None:
         special_peaks=None,
     )
 
-    # 5. Apply calibration
-    # analyzer.apply_calibration()
-
-    # 6. Perform enzyme kinetics analysis
+    # 5. Fit models to raw area/s velocities
     analyzer.fit()
+
+    is_calibrated = args.is_calibrated
+
+    # 6. Apply calibration if a calibration file was provided
+    if args.calibration_path is not None:
+        apply_calibration(args.calibration_path, args.peak_prefixes, analyzer)
+        is_calibrated = True
+    elif not args.is_calibrated:
+        _logger.warning(
+            "No calibration path provided. kcat and kcat/Km carry non-physical "
+            "units until a Calibration is applied.",
+        )
 
     # 7. Plot and save results
     base_dest_path = args.target_dir / args.path.name
     analyzer.export_csv(base_dest_path, overwrite=args.overwrite)
-    analyzer.plot(base_dest_path, is_calibrated=args.is_calibrated, overwrite=args.overwrite)
+    analyzer.plot(base_dest_path, is_calibrated=is_calibrated, overwrite=args.overwrite)
 
     _logger.info("Analysis complete.")
 
@@ -166,6 +195,34 @@ def run_enzyme_kinetic_analysis_pipeline(args: KineticArgs) -> None:
         "\n **s⁻¹** (kcat)"
         "\n **s⁻¹·M⁻¹** (kcat/Km)",
     )
+
+
+def apply_calibration(path: Path, peak_prefixes: frozenset[str] | None, analyzer: KineticAnalyzer) -> KineticAnalyzer:
+    """Applies a fitted Calibration object to the KineticAnalyzer."""
+    # 1. Load data
+    df = load_plottable_data(path, sanitize=True, drop_indexlike=True)
+    required_cols = {"substrate_conc", "peak_id", "mean", "std", "count"}
+    missing = required_cols - set(df.columns)
+    if missing:
+        raise KeyError(f"Missing required columns: {sorted(missing)}")
+
+    # 2. Canonicalize peak IDs
+    df = canonicalize_peak_ids(df, prefixes=peak_prefixes)
+
+    # 3. Sort data (defensive guard)
+    df.sort_values(by=["peak_id", "substrate_conc"], inplace=True)
+    _logger.info("Loaded %d peaks from %s", len(df), path)
+
+    for peak_id in df["peak_id"].unique():
+        if peak_id.lower() == "olv":
+            continue
+        sub_df = df[df["peak_id"] == peak_id]
+        # 4. Fit calibration model
+        model = fit_calibration(sub_df["substrate_conc"], sub_df["mean"], sigma=sub_df["std"])
+        analyzer.apply_calibration(model, peak_ids=[peak_id])
+        _logger.info("Applied calibration to %s", peak_id)
+
+    return analyzer
 
 
 def main() -> None:

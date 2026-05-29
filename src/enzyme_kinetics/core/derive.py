@@ -77,13 +77,13 @@ def _kcat_km_with_covariance(
             Units of pcov entries must be consistent with vmax and km units.
 
     Returns:
-        A tuple of (kcat_km_M, kcat_km_se_M) in s⁻¹·M⁻¹. Returns (nan, nan)
+        A tuple of (kcat_km_M, kcat_km_std_M) in s⁻¹·M⁻¹. Returns (nan, nan)
         if km ≤ 0, vmax ≤ 0, or pcov contains nan (e.g. for LB fits).
     """
     if km <= 0 or vmax <= 0:
         return np.nan, np.nan
-    if np.any(np.isnan(pcov[:2, :2])):
-        # Fallback for LB fits where pcov is undefined
+    if not np.all(np.isfinite(pcov[:2, :2])):
+        # Fallback for LB fits or singular covariance (pcov contains nan or inf)
         return np.nan, np.nan
 
     # Convert Km from µM to M for the standard s⁻¹·M⁻¹ unit of kcat/Km
@@ -104,8 +104,8 @@ def _kcat_km_with_covariance(
         + df_dkm**2 * var_km
         + 2.0 * df_dvmax * df_dkm * cov_vmax_km
     )
-    kcat_km_se_M = float(np.sqrt(max(var_kcat_km, 0.0)))  # clamp numerical negatives
-    return float(kcat_km_M), kcat_km_se_M
+    kcat_km_std_M = float(np.sqrt(max(var_kcat_km, 0.0)))  # clamp numerical negatives
+    return float(kcat_km_M), kcat_km_std_M
 
 
 # ---------------------------------------------------------------------
@@ -124,16 +124,16 @@ class KineticConstants:
         fit: Primary FitResult from the MM, Hill, or SI model fit.
         kcat: Turnover number in s⁻¹ after calibration; in non-physical units
             (area · µM⁻¹ · s⁻¹) before calibration.
-        kcat_se: Standard error of kcat in the same units as kcat.
+        kcat_std: Standard deviation of kcat in the same units as kcat.
         kcat_km_M: Catalytic efficiency kcat/Km in s⁻¹·M⁻¹ after calibration.
             Km is converted from µM to M before computing the ratio so that the
             result is in the standard literature unit. Before calibration the
             numerator carries non-physical units and kcat_km_M should not be
             compared to literature values.
-        kcat_km_se_M: Standard error of kcat_km_M in s⁻¹·M⁻¹, propagated via
+        kcat_km_std_M: Standard deviation of kcat_km_M in s⁻¹·M⁻¹, propagated via
             the full Vmax–Km covariance matrix.
         ki: Substrate inhibition constant Ki in µM; None unless model_type == "si".
-        ki_se: Standard error of Ki in µM; None unless model_type == "si".
+        ki_std: Standard deviation of Ki in µM; None unless model_type == "si".
         lb_fit: Optional Lineweaver-Burk FitResult stored for cross-validation.
     """
 
@@ -141,11 +141,11 @@ class KineticConstants:
     peak_id: str
     fit: FitResult
     kcat: float
-    kcat_se: float
+    kcat_std: float
     kcat_km_M: float  # s⁻¹·M⁻¹; Km converted µM→M before division
-    kcat_km_se_M: float  # SE in s⁻¹·M⁻¹
+    kcat_km_std_M: float  # std in s⁻¹·M⁻¹
     ki: float | None = None
-    ki_se: float | None = None
+    ki_std: float | None = None
     lb_fit: FitResult | None = None
 
     def to_dict(self) -> dict[str, Any]:
@@ -153,8 +153,8 @@ class KineticConstants:
 
         Constructs a dictionary suitable for DataFrame or CSV export. The key
         for the second kinetic parameter is model-dependent: "k_half" for Hill
-        fits and "km" for all other models. hill_n and hill_n_se are emitted
-        only for Hill fits; ki and ki_se are emitted only for SI fits; lb_fit
+        fits and "km" for all other models. hill_n and hill_n_std are emitted
+        only for Hill fits; ki and ki_std are emitted only for SI fits; lb_fit
         fields (km_lb, vmax_lb, r_squared_lb) are emitted only when lb_fit is
         not None. Any extra scalar values on fit.extra are forwarded unless
         their key already exists in the base dictionary.
@@ -170,26 +170,26 @@ class KineticConstants:
             "peak_id": self.peak_id,
             "model": self.fit.model_type,
             "vmax": self.fit.vmax,
-            "vmax_se": self.fit.vmax_se,
+            "vmax_std": self.fit.vmax_std,
             # Label the second parameter correctly per model
             ("k_half" if is_hill else "km"): self.fit.km,
-            ("k_half_se" if is_hill else "km_se"): self.fit.km_se,
+            ("k_half_std" if is_hill else "km_std"): self.fit.km_std,
             "r_squared": self.fit.r_squared,
             "kcat": self.kcat,
-            "kcat_se": self.kcat_se,
+            "kcat_std": self.kcat_std,
             # Explicit s⁻¹·M⁻¹ suffix in the column name makes the unit
             # unambiguous in downstream CSV/DataFrame consumers
             "kcat_km_M": self.kcat_km_M,
-            "kcat_km_se_M": self.kcat_km_se_M,
+            "kcat_km_std_M": self.kcat_km_std_M,
         }
         # FIX 7: emit hill_n only for Hill fits
         if is_hill:
             base["hill_n"] = self.fit.hill_n
-            base["hill_n_se"] = self.fit.hill_n_se
+            base["hill_n_std"] = self.fit.hill_n_std
         # FIX 4: emit Ki only for SI fits
         if self.ki is not None:
             base["ki"] = self.ki
-            base["ki_se"] = self.ki_se
+            base["ki_std"] = self.ki_std
         if self.lb_fit is not None:
             base["km_lb"] = self.lb_fit.km
             base["vmax_lb"] = self.lb_fit.vmax
@@ -226,7 +226,7 @@ def derive_constants(
     µM for Km and kcat/Km to carry their stated units. No runtime check is
     performed; the caller is responsible for unit consistency.
 
-    Ki and ki_se are extracted from the fit and promoted to typed fields when
+    Ki and ki_std are extracted from the fit and promoted to typed fields when
     the model is a substrate-inhibition fit (model_type == "si").
 
     Args:
@@ -240,15 +240,15 @@ def derive_constants(
 
     Returns:
         KineticConstants with substrate, peak_id, kcat in s⁻¹ (post-calibration),
-        kcat_km_M in s⁻¹·M⁻¹, their SEs, and optionally ki/ki_se in µM for
+        kcat_km_M in s⁻¹·M⁻¹, their stds, and optionally ki/ki_std in µM for
         SI fits.
     """
     # kcat = Vmax / [E]
     kcat = fit.vmax / enzyme_conc_um
-    kcat_se = fit.vmax_se / enzyme_conc_um
+    kcat_std = fit.vmax_std / enzyme_conc_um
 
     # FIX 1 + units: full covariance propagation; Km converted µM→M inside
-    kcat_km_M, kcat_km_se_M = _kcat_km_with_covariance(
+    kcat_km_M, kcat_km_std_M = _kcat_km_with_covariance(
         fit.vmax,
         fit.km,
         enzyme_conc_um,
@@ -257,20 +257,20 @@ def derive_constants(
 
     # FIX 4: promote Ki to typed fields for SI fits
     ki: float | None = None
-    ki_se: float | None = None
+    ki_std: float | None = None
     if fit.model_type == "si":
         ki = fit.ki
-        ki_se = fit.ki_se
+        ki_std = fit.ki_std
 
     return KineticConstants(
         substrate=substrate,
         peak_id=peak_id,
         fit=fit,
         kcat=kcat,
-        kcat_se=kcat_se,
+        kcat_std=kcat_std,
         kcat_km_M=kcat_km_M,
-        kcat_km_se_M=kcat_km_se_M,
+        kcat_km_std_M=kcat_km_std_M,
         ki=ki,
-        ki_se=ki_se,
+        ki_std=ki_std,
         lb_fit=lb_fit,
     )

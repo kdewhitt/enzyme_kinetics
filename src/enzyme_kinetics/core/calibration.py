@@ -16,7 +16,7 @@ Typical usage example:
     >>> area = np.array([0.0, 120.3, 601.2, 1198.4, 3005.1, 5997.8])
     >>> cal = fit_calibration(conc, area)
     >>> print(cal.r_squared)
-    >>> conc_um, conc_se = cal.area_to_conc_with_error(1200.0, 15.0)
+    >>> conc_um, conc_std = cal.area_to_conc_with_error(1200.0, 15.0)
 """
 
 from __future__ import annotations
@@ -44,9 +44,6 @@ __all__ = [
 _logger = RichLogAdapter(component=__name__)
 
 
-# TODO: Update docstrings
-# Todo: apply calibration based on peaks
-
 # ---------------------------------------------------------------------
 # Calibration — linear standard curve
 # ---------------------------------------------------------------------
@@ -61,9 +58,9 @@ class Calibration:
 
     Attributes:
         slope: Calibration slope in area/µM.
-        slope_se: Standard error of slope in area/µM.
+        slope_std: Standard deviation of slope in area/µM.
         intercept: Calibration intercept (area at zero concentration).
-        intercept_se: Standard error of intercept in area units.
+        intercept_std: Standard deviation of intercept in area units.
         r_squared: Coefficient of determination (dimensionless); ≥ 0.999
             expected for HPLC CoA calibrations.
         rmse: Root mean square error of the fit in area units.
@@ -73,9 +70,9 @@ class Calibration:
     """
 
     slope: float
-    slope_se: float
+    slope_std: float
     intercept: float
-    intercept_se: float
+    intercept_std: float
     r_squared: float
     rmse: float
     n_points: int
@@ -84,8 +81,8 @@ class Calibration:
     def __str__(self) -> str:
         """Formats the calibration parameters as a compact summary string."""
         return (
-            f"Slope={self.slope:.6f}±{self.slope_se:.6f} area/µM | "
-            f"Intercept={self.intercept:.6f}±{self.intercept_se:.6f} | "
+            f"Slope={self.slope:.6f}±{self.slope_std:.6f} area/µM | "
+            f"Intercept={self.intercept:.6f}±{self.intercept_std:.6f} | "
             f"R²={self.r_squared:.6f} | "
             f"RMSE={self.rmse:.4f}"
         )
@@ -129,13 +126,13 @@ class Calibration:
     def area_to_conc_with_error(
         self,
         area: float,
-        area_se: float,
+        area_std: float,
     ) -> tuple[float, float]:
         """Converts a single area measurement to concentration with propagated uncertainty.
 
         Applies the full delta method to propagate area measurement uncertainty,
         calibration slope uncertainty, and calibration intercept uncertainty into
-        the concentration standard error:
+        the concentration standard deviation:
 
             σ_C² = (σ_area / slope)²
                  + ((area − intercept) · σ_slope / slope²)²
@@ -146,23 +143,23 @@ class Calibration:
 
         Args:
             area: Measured peak area in area units.
-            area_se: Standard error of the area measurement in area units.
+            area_std: Standard deviation of the area measurement in area units.
 
         Returns:
-            A tuple of (concentration in µM, concentration SE in µM).
+            A tuple of (concentration in µM, concentration STD in µM).
         """
         conc = float(self.area_to_conc(area))
         dc_da = 1.0 / self.slope
         dc_ds = -(area - self.intercept) / (self.slope ** 2)
         dc_di = -1.0 / self.slope  # FIX 2: intercept term
-        conc_se = float(
+        conc_std = float(
             np.sqrt(
-                (dc_da * area_se) ** 2
-                + (dc_ds * self.slope_se) ** 2
-                + (dc_di * self.intercept_se) ** 2,  # FIX 2
+                (dc_da * area_std) ** 2
+                + (dc_ds * self.slope_std) ** 2
+                + (dc_di * self.intercept_std) ** 2,  # FIX 2
             ),
         )
-        return conc, conc_se
+        return conc, conc_std
 
 
 # ---------------------------------------------------------------------
@@ -246,9 +243,9 @@ def fit_calibration(
 
     return Calibration(
         slope=float(popt[0]),
-        slope_se=float(perr[0]),
+        slope_std=float(perr[0]),
         intercept=float(popt[1]),
-        intercept_se=float(perr[1]),
+        intercept_std=float(perr[1]),
         r_squared=r_squared(peak_areas, predicted),
         rmse=float(np.sqrt(np.mean((peak_areas - predicted) ** 2))),
         n_points=len(concentrations),
@@ -301,9 +298,9 @@ def fit_calibration(
 #     predicted = _linear(concentrations, *popt)
 #     return Calibration(
 #         slope=popt[0],
-#         slope_se=perr[0],
+#         slope_std=perr[0],
 #         intercept=popt[1],
-#         intercept_se=perr[1],
+#         intercept_std=perr[1],
 #         r_squared=r_squared(peak_areas, predicted),
 #         rmse=float(np.sqrt(np.mean((peak_areas - predicted) ** 2))),
 #         n_points=len(concentrations),
@@ -320,7 +317,7 @@ def save_calibration(cal: Calibration, peak_id: str, path: Path, nice: bool = Fa
     """Saves calibration parameters to a file in JSON or human-readable format.
 
     Two output modes are available. When nice is False (default), writes a
-    compact JSON file containing slope, slope_se, intercept, intercept_se,
+    compact JSON file containing slope, slope_std, intercept, intercept_std,
     r_squared, rmse, n_points, and conc_range. When nice is True, writes a
     formatted plain-text report including a peak-specific header, the fitted
     model equation, all parameters with units, RMSE, n_points, the inverse
@@ -338,9 +335,9 @@ def save_calibration(cal: Calibration, peak_id: str, path: Path, nice: bool = Fa
     if not nice:
         data = {
             "slope": cal.slope,
-            "slope_se": cal.slope_se,
+            "slope_std": cal.slope_std,
             "intercept": cal.intercept,
-            "intercept_se": cal.intercept_se,
+            "intercept_std": cal.intercept_std,
             "r_squared": cal.r_squared,
             "rmse": cal.rmse,
             "n_points": cal.n_points,
@@ -358,8 +355,8 @@ def save_calibration(cal: Calibration, peak_id: str, path: Path, nice: bool = Fa
             f.write("  peak_area = slope × [concentration] + intercept\n\n")
 
             f.write("PARAMETERS:\n")
-            f.write(f"  Slope:        {cal.slope:.10f} ± {cal.slope_se:.10f} area/µM\n")
-            f.write(f"  Intercept:    {cal.intercept:.10f} ± {cal.intercept_se:.10f} area\n")
+            f.write(f"  Slope:        {cal.slope:.10f} ± {cal.slope_std:.10f} area/µM\n")
+            f.write(f"  Intercept:    {cal.intercept:.10f} ± {cal.intercept_std:.10f} area\n")
             f.write(f"  R²:           {cal.r_squared:.10f}\n")
             f.write(f"  RMSE:         {cal.rmse:.6f} area\n")
             f.write(f"  N points:     {cal.n_points}\n")
@@ -372,8 +369,8 @@ def save_calibration(cal: Calibration, peak_id: str, path: Path, nice: bool = Fa
             f.write("```python\n")
             f.write(f"CALIB_SLOPE = {cal.slope:.10f}\n")
             f.write(f"CALIB_INTERCEPT = {cal.intercept:.10f}\n")
-            f.write(f"CALIB_SLOPE_SE = {cal.slope_se:.10f}\n")
-            f.write(f"CALIB_INTERCEPT_SE = {cal.intercept_se:.10f}\n\n")
+            f.write(f"CALIB_SLOPE_STD = {cal.slope_std:.10f}\n")
+            f.write(f"CALIB_INTERCEPT_STD = {cal.intercept_std:.10f}\n\n")
             f.write("concentration = (peak_area - CALIB_INTERCEPT) / CALIB_SLOPE\n")
             f.write("```\n")
 
@@ -383,9 +380,9 @@ def load_calibration(path: Path) -> Calibration:
     data = json.loads(path.read_text())
     return Calibration(
         slope=data["slope"],
-        slope_se=data["slope_se"],
+        slope_std=data["slope_std"],
         intercept=data["intercept"],
-        intercept_se=data["intercept_se"],
+        intercept_std=data["intercept_std"],
         r_squared=data["r_squared"],
         rmse=data["rmse"],
         n_points=data["n_points"],

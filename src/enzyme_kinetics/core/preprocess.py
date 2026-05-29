@@ -59,14 +59,14 @@ def prepare_velocity(
         rxn_time: Reaction duration in seconds.
 
     Returns:
-        A tuple of (s, v, v_sem, mean_signal) where s is the substrate
+        A tuple of (s, v, v_std, mean_signal) where s is the substrate
         concentration array in µM (unchanged), v is reaction velocity in area/s,
-        v_sem is the standard error of v in area/s, and mean_signal is the raw
+        v_std is the standard deviation of v in area/s, and mean_signal is the raw
         peak area array in area units for direct calibration application.
     """
     v = mean_signal / rxn_time
-    v_sem = (std_signal / rxn_time) / np.sqrt(counts)
-    return s, v, v_sem, mean_signal
+    v_std = std_signal / rxn_time
+    return s, v, v_std, mean_signal
 
 
 # ---------------------------------------------------------------------
@@ -94,7 +94,7 @@ def extract_peak_data(
         rxn_time: Reaction duration in seconds used to convert area to velocity.
 
     Returns:
-        A tuple of (s, v, v_sem, mean_signal) as returned by prepare_velocity,
+        A tuple of (s, v, v_std, mean_signal) as returned by prepare_velocity,
         or None if no valid data exists for the given peak_id.
     """
     sub = df.loc[df[PEAK_ID] == peak_id].dropna(subset=[SUBSTRATE_CONC, MEAN])

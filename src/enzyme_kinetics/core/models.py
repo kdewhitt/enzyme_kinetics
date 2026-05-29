@@ -209,8 +209,8 @@ class FitResult:
         return self.popt[0]
 
     @property
-    def vmax_se(self) -> float:
-        """Standard error of Vmax in the same units as vmax."""
+    def vmax_std(self) -> float:
+        """Standard deviation of Vmax in the same units as vmax."""
         return self.perr[0]
 
     @property
@@ -219,8 +219,8 @@ class FitResult:
         return self.popt[1]
 
     @property
-    def km_se(self) -> float:
-        """Standard error of Km (or k_half for Hill fits) in µM."""
+    def km_std(self) -> float:
+        """Standard deviation of Km (or k_half for Hill fits) in µM."""
         return self.perr[1]
 
     @property
@@ -233,11 +233,11 @@ class FitResult:
         return self.popt[1]
 
     @property
-    def k_half_se(self) -> float:
-        """Standard error of k_half in µM from a Hill fit. Raises if model is not "hill"."""
+    def k_half_std(self) -> float:
+        """Standard deviation of k_half in µM from a Hill fit. Raises if model is not "hill"."""
         if self.model_type != "hill":
             raise AttributeError(
-                f"k_half_se is only defined for Hill fits; this is '{self.model_type}'",
+                f"k_half_std is only defined for Hill fits; this is '{self.model_type}'",
             )
         return self.perr[1]
 
@@ -251,11 +251,11 @@ class FitResult:
         return self.popt[2]
 
     @property
-    def hill_n_se(self) -> float:
-        """Standard error of the Hill cooperativity coefficient n (dimensionless). Raises if model is not "hill"."""
+    def hill_n_std(self) -> float:
+        """Standard deviation of the Hill cooperativity coefficient n (dimensionless). Raises if model is not "hill"."""
         if self.model_type != "hill":
             raise AttributeError(
-                f"hill_n_se is only defined for Hill fits; this is '{self.model_type}'",
+                f"hill_n_std is only defined for Hill fits; this is '{self.model_type}'",
             )
         return self.perr[2]
 
@@ -269,11 +269,11 @@ class FitResult:
         return self.popt[2]
 
     @property
-    def ki_se(self) -> float:
-        """Standard error of Ki in µM. Raises if model is not "si"."""
+    def ki_std(self) -> float:
+        """Standard deviation of Ki in µM. Raises if model is not "si"."""
         if self.model_type != "si":
             raise AttributeError(
-                f"ki_se is only defined for substrate-inhibition fits; this is '{self.model_type}'",
+                f"ki_std is only defined for substrate-inhibition fits; this is '{self.model_type}'",
             )
         return self.perr[2]
 

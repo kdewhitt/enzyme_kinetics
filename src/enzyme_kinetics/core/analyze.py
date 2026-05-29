@@ -50,7 +50,7 @@ def _select_and_fit(
     peak_id: str,
     s: np.ndarray,
     v: np.ndarray,
-    v_sem: np.ndarray,
+    v_std: np.ndarray,
     *,
     special_peaks: dict[str, str] | None = None,
 ) -> FitResult:
@@ -64,7 +64,7 @@ def _select_and_fit(
         peak_id: Identifier for the HPLC peak being fitted.
         s: Substrate concentration array in µM.
         v: Reaction velocity array (area/s before calibration; µM/s after).
-        v_sem: Per-point standard errors on v in the same units as v.
+        v_std: Per-point standard deviations of v in the same units as v.
         special_peaks: Optional mapping of peak_id to model type string. Only
             "hill" is currently dispatched; unrecognized values fall back to
             Michaelis-Menten. Defaults to None.
@@ -74,11 +74,11 @@ def _select_and_fit(
     """
     special = (special_peaks or {}).get(peak_id)
     if special == "hill":
-        return fit_hill(s, v, sigma=v_sem)
+        return fit_hill(s, v, sigma=v_std)
 
     # if peak_id.lower() == "olv":
-    #     return fit_threshold_michaelis_menten(s, v, sigma=v_sem)
-    return fit_michaelis_menten(s, v, sigma=v_sem)
+    #     return fit_threshold_michaelis_menten(s, v, sigma=v_std)
+    return fit_michaelis_menten(s, v, sigma=v_std)
 
 
 # ---------------------------------------------------------------------
@@ -144,7 +144,7 @@ class KineticAnalyzer:
         self.special_peaks = special_peaks or {}
 
         self.results: dict[str, KineticConstants] = {}
-        self.calibration: Calibration | None = None
+        self.calibrations: dict[str, Calibration] = {}
 
     def fit(self) -> Self:
         """Fits kinetic models to all peaks in self.df using raw area/s velocities.
@@ -168,13 +168,13 @@ class KineticAnalyzer:
             data = extract_peak_data(self.df, peak_id, self.reaction_time_seconds)
             if data is None:
                 continue
-            s, v, v_sem, _ = data  # raw area not needed at fit stage
+            s, v, v_std, _ = data  # raw area not needed at fit stage
             try:
                 mm_fit = _select_and_fit(
                     peak_id,
                     s,
                     v,
-                    v_sem,
+                    v_std,
                     special_peaks=self.special_peaks,
                 )
                 lb_fit: FitResult | None = None
@@ -189,7 +189,7 @@ class KineticAnalyzer:
                     self.enzyme_conc_um,
                     lb_fit=lb_fit,
                 )
-                _logger.success(f"✓ {peak_id}: Km={self.results[peak_id].fit.km}")
+                _logger.success(f"{peak_id}: Km={self.results[peak_id].fit.km}")
 
             except Exception as exc:
                 _logger.warning("Fit failed for %s: %s", peak_id, exc)
@@ -199,22 +199,25 @@ class KineticAnalyzer:
         self,
         cal: Calibration,
         *,
-        precise_sem: bool = True,
+        precise_std: bool = True,
+        peak_ids: list[str] | None = None,
     ) -> Self:
-        """Re-fits all peaks using calibrated µM/s velocities derived from a Calibration.
+        """Re-fits peaks using calibrated µM/s velocities derived from a Calibration.
 
         Converts raw mean peak area to µM concentration via the calibration curve,
         then divides by reaction_time_seconds to produce velocity in µM/s. This
         makes kcat (s⁻¹) and kcat/Km (s⁻¹·M⁻¹) physically meaningful for
         comparison with literature values.
 
-        Model selection respects self.special_peaks via _select_and_fit, so peaks
-        originally fitted as Hill models are re-fitted as Hill models after
-        calibration rather than defaulting to Michaelis-Menten.
+        When peak_ids is None, all peaks are recalibrated and self.results is
+        replaced entirely. When peak_ids is provided, only those peaks are
+        recalibrated and self.results is updated in-place for those keys only;
+        all other peaks retain their existing results. Model selection respects
+        self.special_peaks via _select_and_fit in both modes.
 
-        Two SEM propagation modes are available. The precise mode (default) applies
+        Two propagation modes are available. The precise mode (default) applies
         the full delta-method per data point, propagating both slope and intercept
-        uncertainty from the calibration curve. The simplified mode divides v_sem
+        uncertainty from the calibration curve. The simplified mode divides v_std
         by the calibration slope only, which is appropriate when calibration
         parameter uncertainty is negligible relative to replicate variance.
 
@@ -225,13 +228,20 @@ class KineticAnalyzer:
             cal: Fitted Calibration object produced by fit_calibration(). Must have
                 been fitted before passing; area_to_conc and area_to_conc_with_error
                 are called on each peak's mean signal array.
-            precise_sem: If True, applies full delta-method SEM propagation including
+            precise_std: If True, applies full delta-method propagation including
                 slope and intercept uncertainty from the calibration curve (recommended).
-                If False, uses the simplified approximation v_sem / slope. Defaults
+                If False, uses the simplified approximation v_std / slope. Defaults
                 to True.
+            peak_ids: Optional list of peak_ids to recalibrate. If provided, only
+                those peaks are re-fitted and merged into self.results; all other
+                peaks retain their current results. All supplied peak_ids must already
+                exist in self.results. Defaults to None.
 
         Returns:
             The KineticAnalyzer instance, enabling method chaining.
+
+        Raises:
+            ValueError: If peak_ids contains any peak_id not present in self.results.
 
         Note:
             A warning is logged if cal.is_valid() returns False (R² below threshold
@@ -247,46 +257,58 @@ class KineticAnalyzer:
                 cal.slope,
             )
 
-        self.calibration = cal
+        if peak_ids is not None:
+            unknown = set(peak_ids) - self.results.keys()
+            if unknown:
+                raise ValueError(
+                    f"peak_ids not found in results (call fit() first): {sorted(unknown)}",
+                )
+
+        targets = (
+            {k: v for k, v in self.results.items() if k in peak_ids}
+            if peak_ids is not None
+            else self.results
+        )
         recalculated: dict[str, KineticConstants] = {}
 
-        for peak_id, kc in self.results.items():
+        for peak_id, kc in targets.items():
             data = extract_peak_data(self.df, peak_id, self.reaction_time_seconds)
             if data is None:
                 continue
 
             # Unpack raw area; apply calibration directly to area
-            s, _v_raw, v_sem_raw, mean_signal = data
+            s, _v_raw, v_std_raw, mean_signal = data
 
             # Convert area → µM concentration, then divide by rxn_time for velocity
             v_um = np.asarray(cal.area_to_conc(mean_signal)) / self.reaction_time_seconds
 
-            # Precise vs. simplified SEM scaling
-            if precise_sem:
-                # Full delta-method per data point: propagates slope_se and intercept_se
-                v_sem_um = np.array(
+            # Precise vs. simplified std propagation
+            if precise_std:
+                # Full delta-method per data point: propagates slope_std and intercept_std
+                v_std_um = np.array(
                     [
                         cal.area_to_conc_with_error(
                             float(area),
-                            float(area_se * self.reaction_time_seconds),
+                            float(area_std * self.reaction_time_seconds),
                         )[1]
                         / self.reaction_time_seconds
-                        for area, area_se in zip(
+                        for area, area_std in zip(
                         mean_signal,
-                        v_sem_raw * self.reaction_time_seconds,
+                        v_std_raw,
                     )
                     ],
                 )
             else:
                 # Simplified approximation: ignores calibration parameter uncertainty
-                v_sem_um = v_sem_raw / cal.slope
+                v_std_um = v_std_raw / cal.slope
 
+            self.calibrations[peak_id] = cal
             try:
                 mm_fit = _select_and_fit(
                     peak_id,
                     s,
                     v_um,
-                    v_sem_um,
+                    v_std_um,
                     special_peaks=self.special_peaks,
                 )
                 recalculated[peak_id] = derive_constants(
@@ -299,7 +321,11 @@ class KineticAnalyzer:
             except Exception as exc:
                 _logger.warning("Calibrated re-fit failed for %s: %s", peak_id, exc)
 
-        self.results = recalculated
+        if peak_ids is not None:
+            self.results.update(recalculated)
+        else:
+            self.results = recalculated
+
         return self
 
     def plot(self, dest: Path, *, is_calibrated: bool = False, overwrite: bool = False) -> Self:
@@ -329,6 +355,7 @@ class KineticAnalyzer:
             reaction_time_seconds=self.reaction_time_seconds,
             overwrite=overwrite,
             calibrated=is_calibrated,
+            calibrations=self.calibrations or None,
         )
         (
             plotter.plot()

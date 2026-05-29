@@ -2,12 +2,12 @@ from __future__ import annotations
 
 import os
 from pathlib import Path
+from typing import Annotated
 
 import tyro
 from logurich import configure_richloguru, RichLogAdapter
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 from rich.console import Console
-from tyro.conf import Positional
 
 from enzyme_kinetics.core import (
     canonicalize_peak_ids,
@@ -19,21 +19,64 @@ from enzyme_kinetics.core.calibration import fit_calibration, plot_calibration, 
 configure_richloguru(level="INFO")
 _logger = RichLogAdapter(component=__name__)
 
-# TODO: Update docstrings
-
-
 # Environment setup for Rich
 os.environ.setdefault("FORCE_COLOR", "1")
 os.environ.setdefault("TERM", "xterm-256color")
-
 console = Console(force_terminal=True, color_system="truecolor")
 
 
 class CalibrationArgs(BaseModel):
-    model_config = ConfigDict(extra="ignore", frozen=True, arbitrary_types_allowed=True)
+    """CLI configuration model for the per-peak HPLC calibration pipeline.
 
-    path: Positional[Path]
-    outfile: Positional[Path]
+    Accepts a pre-aggregated CSV produced by PeakAnalyzer (the
+    "_[area|height]_analysis.csv" output) containing one row per
+    peak_id × substrate_conc combination with pre-computed replicate
+    statistics. Column names are normalized to snake_case before
+    validation.
+
+    In the calibration context, substrate_conc holds the known CoA
+    standard concentrations (µM) used as the x-axis of the calibration
+    curve, and mean holds the corresponding measured peak areas. This is
+    the inverse of the roles these columns play in the enzyme kinetics
+    pipeline. A separate calibration curve is fitted and exported for
+    each unique peak_id in the input file.
+
+    Required columns:
+        substrate_conc: Known CoA concentrations of calibration standards
+            in µM. Values must be in µM; passing values in any other unit
+            will silently produce an incorrectly scaled calibration curve.
+        peak_id: HPLC peak identifier string.
+        mean: Mean integrated peak area across replicates.
+        std: Standard deviation of peak area across replicates.
+        count: Number of replicates per group.
+
+    Attributes:
+        path: Path to the pre-aggregated PeakAnalyzer CSV file to process.
+        outfile: Base output file path. A peak-specific suffix is appended
+            to the stem for each peak_id, producing one .txt report and one
+            .png diagnostic plot per peak.
+        peak_prefixes: Optional FlexPeakPrefixes configuration controlling
+            which peak ID prefixes are recognized during canonicalization.
+            If None, default canonicalization rules apply. Defaults to None.
+        pretty: Whether to write calibration parameters as a human-readable
+            plain-text report (nice=True) rather than compact JSON.
+            Defaults to True.
+        overwrite: Whether to overwrite existing output files. Defaults to
+            False.
+        verbose: Whether to enable verbose logging output. Excluded from
+            model serialization. Defaults to False.
+    """
+
+    model_config = ConfigDict(
+        extra="ignore",
+        frozen=True,
+        arbitrary_types_allowed=True,
+        str_strip_whitespace=True,
+        validate_default=True,
+    )
+
+    path: Annotated[Path, tyro.conf.Positional]
+    outfile: Annotated[Path, tyro.conf.Positional]
 
     peak_prefixes: FlexPeakPrefixes = None
 
@@ -50,7 +93,26 @@ class CalibrationArgs(BaseModel):
 
 
 def run_calibration_pipeline(args: CalibrationArgs) -> None:
-    """Run the enzyme kinetics calibration pipeline with provided arguments."""
+    """Executes the per-peak HPLC calibration pipeline from CLI arguments.
+
+    Loads and validates the input DataFrame, canonicalizes peak identifiers,
+    and for each unique peak_id fits a linear calibration curve to the
+    substrate_conc (µM) vs. mean peak area data. Two output files are produced
+    per peak: a plain-text parameter report (or JSON if pretty=False) and a
+    three-panel diagnostic plot (.png).
+
+    Args:
+        args: Fully validated CalibrationArgs instance produced by tyro.cli.
+
+    Raises:
+        KeyError: If the input DataFrame is missing any of the required
+            columns: "substrate_conc", "peak_id", "mean", "std", "count".
+
+    Note:
+        substrate_conc values must be in µM. Passing values in any other
+        unit will silently produce an incorrectly scaled calibration curve
+        and corrupt all downstream kcat and kcat/Km calculations.
+    """
     # 1. Load data
     df = load_plottable_data(args.path, sanitize=True, drop_indexlike=True)
     required_cols = {"substrate_conc", "peak_id", "mean", "std", "count"}
@@ -81,7 +143,7 @@ def run_calibration_pipeline(args: CalibrationArgs) -> None:
 
 
 def main() -> None:
-    """Parses CLI arguments and runs the enzyme kinetics analysis pipeline."""
+    """Parses CLI arguments and runs the per-peak HPLC calibration pipeline."""
     args = tyro.cli(CalibrationArgs)
     run_calibration_pipeline(args)
 
