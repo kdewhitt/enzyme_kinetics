@@ -125,13 +125,13 @@ class Compounds(StrEnum):
     Attributes:
         HTAL: Hexanoyl triacetic acid lactone.
         PDAL: Pentyl diacetic acid lactone.
-        OLA: Olivetolic acid.
+        OA: Olivetolic acid.
         OLV: Olivetol.
     """
 
     HTAL = "HTAL"
     PDAL = "PDAL"
-    OLA = "OLA"
+    OA = "OA"
     OLV = "OLV"
 
     # VOID_PEAK = "VOID_PEAK"
@@ -159,9 +159,9 @@ class Compounds(StrEnum):
 
         Examples:
             >>> Compounds.resolve("ola")
-            <Compounds.OLA: 'OLA'>
+            <Compounds.OA: 'OA'>
             >>> Compounds.resolve("olivetolic acid")
-            <Compounds.OLA: 'OLA'>
+            <Compounds.OA: 'OA'>
         """
         if isinstance(label, cls):
             return label
@@ -202,8 +202,8 @@ class Compounds(StrEnum):
 
         Examples:
             >>> p = LabelProfile(prefix="C5")
-            >>> Compounds.OLA.format_label(p)
-            'C5-OLA'
+            >>> Compounds.OA.format_label(p)
+            'C5-OA'
         """
         base = profile.overrides.get(self, self.value)
         return f"{profile.prefix}{profile.sep}{base}"
@@ -234,7 +234,7 @@ class LabelProfile:
 _COMPOUND_ALIASES: Final[Mapping[Compounds, tuple[str, ...]]] = {
     Compounds.HTAL: ("hexanoyl triacetic acid", "hexanoyl-triacetic acid"),
     Compounds.PDAL: ("pentyl diacetic acid", "pentyl-diacetic acid"),
-    Compounds.OLA: ("olivetolic acid", "oa"),
+    Compounds.OA: ("olivetolic acid", "ola"),
     Compounds.OLV: ("olivetol", "olivetolate"),
 }
 

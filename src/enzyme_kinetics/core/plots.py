@@ -45,7 +45,7 @@ _logger = RichLogAdapter(component=__name__)
 
 # Display name overrides for known peak identifiers.
 _LABEL_MAP = {
-    "OLA": "Olivetolic Acid",
+    "OA": "Olivetolic Acid",
     "OLV": "Olivetol",
 }
 
@@ -188,6 +188,7 @@ class KineticPlots:
             ax.set_title(_LABEL_MAP.get(peak_id, peak_id), fontweight="bold")
             ax.set_xlabel(f"Substrate Concentration [{kc.substrate}] (µM)")
             ax.set_ylabel(
+                # "Velocity (µM min⁻¹)",
                 "Velocity (µM min⁻¹)" if self.calibrated else "Velocity (area min⁻¹)"
             )
 
@@ -447,7 +448,7 @@ class KineticPlots:
         _bar(ax_km, km_vals, km_errs, "Km", "Km (µM)")
         _bar(ax_vmax, vmax_vals, vmax_errs, "Vmax", "Vmax (signal/min)")
         _bar(ax_kcat, kcat_vals, kcat_errs, "kcat", "kcat (s⁻¹)")
-        _bar(ax_kcat_km, kcat_km_vals, kcat_km_errs, "kcat / Km", "kcat/Km (M⁻¹·s⁻¹)")
+        _bar(ax_kcat_km, kcat_km_vals, kcat_km_errs, "kcat / Km", "kcat/Km (s⁻¹·M⁻¹)")
 
         fig.tight_layout()
         plot_path = self._make_builder().with_tag("efficiency")

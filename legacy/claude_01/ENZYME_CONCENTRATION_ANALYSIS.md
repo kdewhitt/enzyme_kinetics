@@ -55,13 +55,13 @@ Catalytic Efficiency = kcat / Km
 - An enzyme with:
   - High Km (weak affinity) BUT high kcat (fast turnover)
   - Might have similar efficiency to one with low Km and slow kcat
-- Units: **µM⁻¹·s⁻¹** (or M⁻¹·s⁻¹)
-- Higher is better; exceptional enzymes reach 10⁵ to 10⁷ M⁻¹·s⁻¹
+- Units: **s⁻¹·µM⁻¹** (or s⁻¹·M⁻¹)
+- Higher is better; exceptional enzymes reach 10⁵ to 10⁷ s⁻¹·M⁻¹
 
 ### Evolutionary optimization:
 - Wild-type enzymes are typically optimized for:
   - **Km ≈ [S]_cellular**: Km close to actual cellular substrate concentration
-  - **kcat/Km**: Often approaching diffusion-limited rates (~10⁸ M⁻¹·s⁻¹)
+  - **kcat/Km**: Often approaching diffusion-limited rates (~10⁸ s⁻¹·M⁻¹)
 
 ---
 

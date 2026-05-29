@@ -8,31 +8,23 @@ from typing import Any, Final, Self
 import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
-
 from kgdlibs.pathtools import ExportPathBuilder, to_absolute_path
-from plots.config import (
-    COUNT,
-    MEAN,
-    PEAK_ID,
-    REL_ACT,
-    STD,
-    filter_stats_params,
-)
+from plots.config import (COUNT, filter_stats_params, MEAN, PEAK_ID, REL_ACT, STD)
 from process.analyze import COLUMN_NAME_MAP, normalize_peak_id
 from process.compounds import COMPOUND_PREFIXES
 from process.io import read_csv_peaks
 from process.normals import require_columns
 
 from kinetics_core import (
-    FitResult,
-    KineticConstants,
     Calibration,
     derive_constants,
-    fit_michaelis_menten,
     fit_hill,
     fit_lineweaver_burk,
-    prepare_velocity,
+    fit_michaelis_menten,
+    FitResult,
+    KineticConstants,
     lineweaver_burk_transform,
+    prepare_velocity,
 )
 
 _logger = logging.getLogger(__name__)
@@ -584,7 +576,7 @@ class EnzymeKineticsAnalysis:
         _bar(ax_km, km_vals, km_errs, "Km", "Km (µM)")
         _bar(ax_vmax, vmax_vals, vmax_errs, "Vmax", "Vmax (signal/min)")
         _bar(ax_kcat, kcat_vals, kcat_errs, "kcat", "kcat (s⁻¹)")
-        _bar(ax_kcat_km, kcat_km_vals, kcat_km_errs, "kcat / Km", "kcat/Km (M⁻¹·s⁻¹)")
+        _bar(ax_kcat_km, kcat_km_vals, kcat_km_errs, "kcat / Km", "kcat/Km (s⁻¹·M⁻¹)")
 
         fig.tight_layout()
         plot_path = self.dest / f"{self.path.stem}_efficiency.png"

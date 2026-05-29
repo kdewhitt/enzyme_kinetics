@@ -254,7 +254,8 @@ All `from enzyme_kinetics import X` calls in examples and documentation will fai
 The `__init__.py` must be populated with the exports listed in `API_DOCUMENTATION.md`.
 
 ### 3.3 Units and calibration dependency of kcat
-`kcat` and `kcat/Km` only have physically meaningful units (s⁻¹ and M⁻¹·s⁻¹
+
+`kcat` and `kcat/Km` only have physically meaningful units (s⁻¹ and s⁻¹·M⁻¹
 respectively) after a calibration curve has been applied. When operating on raw peak
 areas, these values are in non-standard units. This distinction is critical for
 comparing results with literature values and should be prominently documented
@@ -285,23 +286,23 @@ instance across datasets will get incorrect `results_to_dataframe()` output.
 
 The following domain-specific terms should be used consistently in docstrings:
 
-| Term | Definition / Context |
-|---|---|
-| Km (Michaelis constant) | Substrate concentration at half-maximal velocity; units µM; reflects apparent substrate affinity |
-| Vmax | Maximum reaction velocity at saturating substrate; units depend on whether calibration applied |
-| kcat (turnover number) | Catalytic rate constant; Vmax / [E]total; units s⁻¹ (after calibration) |
-| kcat/Km (catalytic efficiency) | Second-order rate constant for substrate capture; units M⁻¹·s⁻¹; the standard metric for comparing enzyme activity across substrates |
-| Ki (inhibition constant) | Substrate concentration at which inhibition halves the rate in the SI model |
-| Lineweaver-Burk plot | Double-reciprocal linearization of MM equation; susceptible to error amplification at low [S] |
-| CoA / CoA-SH | Coenzyme A (free thiol form); the product measured by HPLC in acyltransferase assays |
-| HexCoA | Hexanoyl-CoA; acyl-CoA substrate used in the assay represented in the example data |
-| HPLC peak area | Integrated chromatographic signal; proportional to analyte mass injected |
-| Calibration curve | Linear regression of peak area vs. known CoA concentration; converts raw HPLC signal to µM |
-| R² | Coefficient of determination; ≥ 0.95 considered acceptable for MM fitting; ≥ 0.999 expected for HPLC calibration |
-| Levenberg-Marquardt | Non-linear least-squares algorithm used by `scipy.optimize.curve_fit`; robust to poor initial guesses |
-| Error propagation | Delta-method propagation of measurement uncertainty through derived quantities (kcat, kcat/Km, concentration) |
-| Reaction velocity (v) | Rate of product formation per unit time; in raw area units unless calibrated |
-| Substrate inhibition | Kinetic phenomenon where excess [S] reduces v, observable as a bell-shaped v vs. [S] curve |
+| Term                           | Definition / Context                                                                                                                 |
+|--------------------------------|--------------------------------------------------------------------------------------------------------------------------------------|
+| Km (Michaelis constant)        | Substrate concentration at half-maximal velocity; units µM; reflects apparent substrate affinity                                     |
+| Vmax                           | Maximum reaction velocity at saturating substrate; units depend on whether calibration applied                                       |
+| kcat (turnover number)         | Catalytic rate constant; Vmax / [E]total; units s⁻¹ (after calibration)                                                              |
+| kcat/Km (catalytic efficiency) | Second-order rate constant for substrate capture; units s⁻¹·M⁻¹; the standard metric for comparing enzyme activity across substrates |
+| Ki (inhibition constant)       | Substrate concentration at which inhibition halves the rate in the SI model                                                          |
+| Lineweaver-Burk plot           | Double-reciprocal linearization of MM equation; susceptible to error amplification at low [S]                                        |
+| CoA / CoA-SH                   | Coenzyme A (free thiol form); the product measured by HPLC in acyltransferase assays                                                 |
+| HexCoA                         | Hexanoyl-CoA; acyl-CoA substrate used in the assay represented in the example data                                                   |
+| HPLC peak area                 | Integrated chromatographic signal; proportional to analyte mass injected                                                             |
+| Calibration curve              | Linear regression of peak area vs. known CoA concentration; converts raw HPLC signal to µM                                           |
+| R²                             | Coefficient of determination; ≥ 0.95 considered acceptable for MM fitting; ≥ 0.999 expected for HPLC calibration                     |
+| Levenberg-Marquardt            | Non-linear least-squares algorithm used by `scipy.optimize.curve_fit`; robust to poor initial guesses                                |
+| Error propagation              | Delta-method propagation of measurement uncertainty through derived quantities (kcat, kcat/Km, concentration)                        |
+| Reaction velocity (v)          | Rate of product formation per unit time; in raw area units unless calibrated                                                         |
+| Substrate inhibition           | Kinetic phenomenon where excess [S] reduces v, observable as a bell-shaped v vs. [S] curve                                           |
 
 ---
 

@@ -89,7 +89,7 @@ def hill_equation(s: np.ndarray, vmax: float, k_half: float, n: float) -> np.nda
     Returns:
         Reaction velocity array in the same units as vmax.
     """
-    return (vmax * s**n) / (k_half**n + s**n)
+    return (vmax * s ** n) / (k_half ** n + s ** n)
 
 
 def threshold_michaelis_menten(
@@ -144,7 +144,7 @@ def substrate_inhibition(
     Returns:
         Reaction velocity array in the same units as vmax.
     """
-    return (vmax * s) / (km + s + (s**2) / ki)
+    return (vmax * s) / (km + s + (s ** 2) / ki)
 
 
 def lineweaver_burk_transform(
@@ -197,10 +197,10 @@ class FitResult:
     model_func: Callable[..., np.ndarray]
     popt: tuple[float, ...]
     perr: tuple[float, ...]
-    pcov: np.ndarray  # FIX 1: carry full covariance for correlated propagation
+    pcov: np.ndarray
     r_squared: float
     n_points: int
-    model_type: str = "mm"  # FIX 7: track model identity for correct property semantics
+    model_type: str = "mm"
     extra: dict[str, Any] = field(default_factory=dict)
 
     @property
@@ -223,7 +223,6 @@ class FitResult:
         """Standard error of Km (or k_half for Hill fits) in µM."""
         return self.perr[1]
 
-    # FIX 7 — Hill-specific accessors; raise clearly if called on wrong model type.
     @property
     def k_half(self) -> float:
         """Half-saturation constant k_half in µM from a Hill fit (popt[1]). Raises if model is not "hill"."""
@@ -260,7 +259,6 @@ class FitResult:
             )
         return self.perr[2]
 
-    # FIX 4 — typed Ki accessor for substrate-inhibition fits.
     @property
     def ki(self) -> float:
         """Substrate inhibition constant Ki in µM from popt[2]. Raises if model is not "si"."""
@@ -538,7 +536,7 @@ def fit_lineweaver_burk(s: np.ndarray, v: np.ndarray) -> FitResult:
     """
     s_inv, v_inv = lineweaver_burk_transform(s, v)
     slope, intercept, r_value, _, std_err = linregress(s_inv, v_inv)
-    r2 = r_value**2
+    r2 = r_value ** 2
     vmax = 1.0 / intercept if intercept != 0 else np.nan
     km = slope * vmax if not np.isnan(vmax) else np.nan
     # LB std errors live in reciprocal space and do not map cleanly to parameter

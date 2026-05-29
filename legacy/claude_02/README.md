@@ -185,18 +185,18 @@ v = (Vmax × [S]) / (Km + [S] + [S]²/Ki)
 ### Enzyme-Normalized Parameters
 ```
 kcat = Vmax / [Enzyme]
-kcat/Km = catalytic efficiency (M⁻¹·s⁻¹)
+kcat/Km = catalytic efficiency (s⁻¹·M⁻¹)
 ```
 
 ## Interpreting Results
 
-| Parameter | Units | Meaning | Good Value |
-|-----------|-------|---------|------------|
-| **Km** | µM | Substrate affinity | < 1 µM |
-| **Vmax** | area/time | Max velocity | Depends on assay |
-| **R²** | dimensionless | Fit quality | > 0.9 |
-| **kcat** | s⁻¹ | Turnovers/enzyme/sec | 1–10⁶ s⁻¹ |
-| **kcat/Km** | M⁻¹·s⁻¹ | Catalytic efficiency | 10⁶–10⁸ M⁻¹·s⁻¹ |
+| Parameter   | Units         | Meaning              | Good Value       |
+|-------------|---------------|----------------------|------------------|
+| **Km**      | µM            | Substrate affinity   | < 1 µM           |
+| **Vmax**    | area/time     | Max velocity         | Depends on assay |
+| **R²**      | dimensionless | Fit quality          | > 0.9            |
+| **kcat**    | s⁻¹           | Turnovers/enzyme/sec | 1–10⁶ s⁻¹        |
+| **kcat/Km** | s⁻¹·M⁻¹       | Catalytic efficiency | 10⁶–10⁸ s⁻¹·M⁻¹  |
 
 ## Common Workflows
 

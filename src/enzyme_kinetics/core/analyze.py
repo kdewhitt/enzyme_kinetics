@@ -96,7 +96,7 @@ class KineticAnalyzer:
 
     fit() populates self.results from raw area/s velocities. apply_calibration()
     rebuilds self.results using µM/s velocities derived from a Calibration object,
-    making kcat and kcat/Km physically meaningful (s⁻¹ and M⁻¹·s⁻¹ respectively).
+    making kcat and kcat/Km physically meaningful (s⁻¹ and s⁻¹·M⁻¹ respectively).
     Calling fit() again after apply_calibration() resets results to raw-area fits.
 
     Attributes:
@@ -205,7 +205,7 @@ class KineticAnalyzer:
 
         Converts raw mean peak area to µM concentration via the calibration curve,
         then divides by reaction_time_seconds to produce velocity in µM/s. This
-        makes kcat (s⁻¹) and kcat/Km (M⁻¹·s⁻¹) physically meaningful for
+        makes kcat (s⁻¹) and kcat/Km (s⁻¹·M⁻¹) physically meaningful for
         comparison with literature values.
 
         Model selection respects self.special_peaks via _select_and_fit, so peaks
@@ -238,7 +238,7 @@ class KineticAnalyzer:
             or non-positive slope), but fitting proceeds. Inspect calibration quality
             before interpreting kcat and kcat/Km values.
         """
-        # FIX 6: guard with calibration validity check
+        # Guard with calibration validity check
         if not cal.is_valid():
             _logger.warning(
                 "Calibration does not meet quality thresholds "
@@ -255,15 +255,13 @@ class KineticAnalyzer:
             if data is None:
                 continue
 
-            # FIX 3: unpack raw area; apply calibration directly to area
+            # Unpack raw area; apply calibration directly to area
             s, _v_raw, v_sem_raw, mean_signal = data
 
             # Convert area → µM concentration, then divide by rxn_time for velocity
-            v_um = (
-                np.asarray(cal.area_to_conc(mean_signal)) / self.reaction_time_seconds
-            )
+            v_um = np.asarray(cal.area_to_conc(mean_signal)) / self.reaction_time_seconds
 
-            # FIX 4: precise vs. simplified SEM scaling
+            # Precise vs. simplified SEM scaling
             if precise_sem:
                 # Full delta-method per data point: propagates slope_se and intercept_se
                 v_sem_um = np.array(
@@ -274,9 +272,9 @@ class KineticAnalyzer:
                         )[1]
                         / self.reaction_time_seconds
                         for area, area_se in zip(
-                            mean_signal,
-                            v_sem_raw * self.reaction_time_seconds,
-                        )
+                        mean_signal,
+                        v_sem_raw * self.reaction_time_seconds,
+                    )
                     ],
                 )
             else:
@@ -304,9 +302,7 @@ class KineticAnalyzer:
         self.results = recalculated
         return self
 
-    def plot(
-        self, dest: Path, *, is_calibrated: bool = False, overwrite: bool = False
-    ) -> Self:
+    def plot(self, dest: Path, *, is_calibrated: bool = False, overwrite: bool = False) -> Self:
         """Generates and saves all kinetic plots for the current results.
 
         Constructs a KineticPlots instance and renders the Michaelis-Menten curves,
@@ -332,7 +328,7 @@ class KineticAnalyzer:
             results=self.results,
             reaction_time_seconds=self.reaction_time_seconds,
             overwrite=overwrite,
-            calibrated=self.calibration is not None,
+            calibrated=is_calibrated,
         )
         (
             plotter.plot()

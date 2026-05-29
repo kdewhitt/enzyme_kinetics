@@ -46,13 +46,13 @@ Your current results use **relative peak area units** rather than absolute produ
 
 ```
 Current units:  area·µM⁻¹·sec⁻¹
-Desired units:  M⁻¹·s⁻¹ (standard literature units)
+Desired units:  s⁻¹·M⁻¹ (standard literature units)
 ```
 
 **Why this matters:**
 - Cannot compare directly with published kcat/Km values
 - Cannot determine absolute turnover rates (reactions/sec)
-- Cannot validate against theoretical diffusion limits (~10⁸–10⁹ M⁻¹·s⁻¹)
+- Cannot validate against theoretical diffusion limits (~10⁸–10⁹ s⁻¹·M⁻¹)
 
 ---
 
@@ -111,7 +111,7 @@ AREA_TO_CONC_SLOPE = 2451.74  # area/µM
 AREA_TO_CONC_INTERCEPT = -23.45  # area
 ```
 
-**Result:** kcat/Km in standard **M⁻¹·s⁻¹** units → publishable!
+**Result:** kcat/Km in standard **s⁻¹·M⁻¹** units → publishable!
 
 ---
 
@@ -237,7 +237,7 @@ equation using the Levenberg-Marquardt algorithm.
 ### Required Before Submission
 1. ✗ CoA calibration data collected and analyzed
 2. ✗ Km and kcat values in absolute units (M and s⁻¹)
-3. ✗ kcat/Km in standard M⁻¹·s⁻¹ units
+3. ✗ kcat/Km in standard s⁻¹·M⁻¹ units
 4. ✗ Investigation of PDAL non-Michaelis-Menten behavior
 5. ✗ Resolution of OLV activity issue
 
@@ -272,7 +272,7 @@ AFTER CALIBRATION (Example with slope = 2451.74):
   Km = 0.0971 µM (unchanged)
   Vmax = 0.111 µM/sec
   kcat = 0.00906 s⁻¹
-  kcat/Km = 93,400 M⁻¹·s⁻¹ ✓ Publishable!
+  kcat/Km = 93,400 s⁻¹·M⁻¹ ✓ Publishable!
 ```
 
 Note: Example conversion shows how calibration transforms relative → absolute units

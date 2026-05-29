@@ -214,10 +214,10 @@ analyzer = EnzymeKineticsAnalyzer(
 
 ### kcat/Km (Catalytic Efficiency)
 
-- **Units:** M⁻¹·s⁻¹ (requires calibration)
+- **Units:** s⁻¹·M⁻¹ (requires calibration)
 - **Meaning:** Combined measure of affinity + turnover
 - **Higher is better:** More efficient enzyme
-- **Typical range:** 10³–10⁸ M⁻¹·s⁻¹
+- **Typical range:** 10³–10⁸ s⁻¹·M⁻¹
 - **Best metric:** Use this to compare enzymes
 
 ### R² (Coefficient of Determination)

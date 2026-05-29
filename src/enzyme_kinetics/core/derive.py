@@ -7,7 +7,7 @@ covariance matrix via the delta method, correctly accounting for the
 anti-correlation between Vmax and Km that arises from non-linear fitting.
 Results are returned as a frozen KineticConstants dataclass.
 
-kcat and kcat/Km carry physically meaningful units (s⁻¹ and M⁻¹·s⁻¹
+kcat and kcat/Km carry physically meaningful units (s⁻¹ and s⁻¹·M⁻¹
 respectively) only after a calibration curve has been applied upstream so that
 Vmax is in µM/s. Before calibration both quantities are in non-physical units
 and should not be compared to literature values.
@@ -64,9 +64,9 @@ def _kcat_km_with_covariance(
     uniformly.
 
     Unit convention: Km is in µM throughout the codebase. kcat/Km is reported
-    in the standard literature unit of M⁻¹·s⁻¹, so Km is converted to M
+    in the standard literature unit of s⁻¹·M⁻¹, so Km is converted to M
     (×1e-6) before computing the ratio. The partial derivatives are scaled by
-    the same factor so that the returned SE is also in M⁻¹·s⁻¹.
+    the same factor so that the returned SE is also in s⁻¹·M⁻¹.
 
     Args:
         vmax: Fitted Vmax in µM/s (after calibration) or area/s (before).
@@ -77,7 +77,7 @@ def _kcat_km_with_covariance(
             Units of pcov entries must be consistent with vmax and km units.
 
     Returns:
-        A tuple of (kcat_km_M, kcat_km_se_M) in M⁻¹·s⁻¹. Returns (nan, nan)
+        A tuple of (kcat_km_M, kcat_km_se_M) in s⁻¹·M⁻¹. Returns (nan, nan)
         if km ≤ 0, vmax ≤ 0, or pcov contains nan (e.g. for LB fits).
     """
     if km <= 0 or vmax <= 0:
@@ -86,7 +86,7 @@ def _kcat_km_with_covariance(
         # Fallback for LB fits where pcov is undefined
         return np.nan, np.nan
 
-    # Convert Km from µM to M for the standard M⁻¹·s⁻¹ unit of kcat/Km
+    # Convert Km from µM to M for the standard s⁻¹·M⁻¹ unit of kcat/Km
     km_M = km * _UM_TO_M
     kcat_km_M = vmax / (enzyme_conc_um * km_M)
 
@@ -125,12 +125,12 @@ class KineticConstants:
         kcat: Turnover number in s⁻¹ after calibration; in non-physical units
             (area · µM⁻¹ · s⁻¹) before calibration.
         kcat_se: Standard error of kcat in the same units as kcat.
-        kcat_km_M: Catalytic efficiency kcat/Km in M⁻¹·s⁻¹ after calibration.
+        kcat_km_M: Catalytic efficiency kcat/Km in s⁻¹·M⁻¹ after calibration.
             Km is converted from µM to M before computing the ratio so that the
             result is in the standard literature unit. Before calibration the
             numerator carries non-physical units and kcat_km_M should not be
             compared to literature values.
-        kcat_km_se_M: Standard error of kcat_km_M in M⁻¹·s⁻¹, propagated via
+        kcat_km_se_M: Standard error of kcat_km_M in s⁻¹·M⁻¹, propagated via
             the full Vmax–Km covariance matrix.
         ki: Substrate inhibition constant Ki in µM; None unless model_type == "si".
         ki_se: Standard error of Ki in µM; None unless model_type == "si".
@@ -142,8 +142,8 @@ class KineticConstants:
     fit: FitResult
     kcat: float
     kcat_se: float
-    kcat_km_M: float  # M⁻¹·s⁻¹; Km converted µM→M before division
-    kcat_km_se_M: float  # SE in M⁻¹·s⁻¹
+    kcat_km_M: float  # s⁻¹·M⁻¹; Km converted µM→M before division
+    kcat_km_se_M: float  # SE in s⁻¹·M⁻¹
     ki: float | None = None
     ki_se: float | None = None
     lb_fit: FitResult | None = None
@@ -177,7 +177,7 @@ class KineticConstants:
             "r_squared": self.fit.r_squared,
             "kcat": self.kcat,
             "kcat_se": self.kcat_se,
-            # Explicit M⁻¹·s⁻¹ suffix in the column name makes the unit
+            # Explicit s⁻¹·M⁻¹ suffix in the column name makes the unit
             # unambiguous in downstream CSV/DataFrame consumers
             "kcat_km_M": self.kcat_km_M,
             "kcat_km_se_M": self.kcat_km_se_M,
@@ -215,7 +215,7 @@ def derive_constants(
     calibration curve has been applied (so that Vmax is in µM/s); before
     calibration Vmax is in area/s and kcat carries non-physical units.
 
-    kcat/Km is reported in M⁻¹·s⁻¹ (the standard literature unit) by
+    kcat/Km is reported in s⁻¹·M⁻¹ (the standard literature unit) by
     converting Km from µM to M before computing the ratio. The conversion
     factor _UM_TO_M (1e-6) is applied inside _kcat_km_with_covariance, which
     also propagates uncertainty via the full Vmax–Km covariance matrix,
@@ -240,7 +240,7 @@ def derive_constants(
 
     Returns:
         KineticConstants with substrate, peak_id, kcat in s⁻¹ (post-calibration),
-        kcat_km_M in M⁻¹·s⁻¹, their SEs, and optionally ki/ki_se in µM for
+        kcat_km_M in s⁻¹·M⁻¹, their SEs, and optionally ki/ki_se in µM for
         SI fits.
     """
     # kcat = Vmax / [E]

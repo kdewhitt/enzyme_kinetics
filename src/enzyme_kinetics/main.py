@@ -24,7 +24,6 @@ _logger = RichLogAdapter(component=__name__)
 # Environment setup for Rich
 os.environ.setdefault("FORCE_COLOR", "1")
 os.environ.setdefault("TERM", "xterm-256color")
-
 console = Console(force_terminal=True, color_system="truecolor")
 
 
@@ -76,8 +75,8 @@ class KineticArgs(BaseModel):
     path: Positional[Path]
     target_dir: Positional[Path]
 
-    enzyme_conc_um: float = 12.25  # in units µM
-    rxn_time: float = 180.0  # in units seconds?
+    enzyme_conc_um: float = 12.25
+    rxn_time: float = 180.0
     substrate: str = "HexCoA"
 
     peak_prefixes: FlexPeakPrefixes = None
@@ -110,7 +109,7 @@ def run_enzyme_kinetic_analysis_pipeline(args: KineticArgs) -> None:
     a calibration curve is applied upstream. The calibration step is
     currently disabled; enable analyzer.apply_calibration() with a fitted
     Calibration object before calling analyzer.fit() to produce physically
-    meaningful s⁻¹ and M⁻¹·s⁻¹ values.
+    meaningful s⁻¹ and s⁻¹·M⁻¹ values.
 
     Args:
         args: Fully validated KineticArgs instance produced by tyro.cli.
@@ -159,6 +158,14 @@ def run_enzyme_kinetic_analysis_pipeline(args: KineticArgs) -> None:
     analyzer.plot(base_dest_path, is_calibrated=args.is_calibrated, overwrite=args.overwrite)
 
     _logger.info("Analysis complete.")
+
+    _logger.info(
+        "Assuming input concentrations were in units µM, "
+        "kinetic constants are in:"
+        "\n **µM** (Km)"
+        "\n **s⁻¹** (kcat)"
+        "\n **s⁻¹·M⁻¹** (kcat/Km)",
+    )
 
 
 def main() -> None:

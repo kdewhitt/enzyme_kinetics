@@ -1,9 +1,9 @@
 from __future__ import annotations
 
 import logging
+from collections.abc import Callable
 from dataclasses import dataclass, field
 from typing import Any
-from collections.abc import Callable
 
 import numpy as np
 from scipy.optimize import curve_fit
@@ -331,7 +331,7 @@ class KineticConstants:
         fit: Primary FitResult (MM, Hill, or SI model).
         kcat: Turnover number (s⁻¹ after calibration; otherwise in raw area units).
         kcat_se: Standard error of kcat.
-        kcat_km: Catalytic efficiency kcat/Km (M⁻¹·s⁻¹ after calibration).
+        kcat_km: Catalytic efficiency kcat/Km (s⁻¹·M⁻¹ after calibration).
         kcat_km_se: Standard error of kcat_km, propagated via full covariance.
         ki: Substrate inhibition constant Ki (µM); None unless model_type == 'si'.
         ki_se: Standard error of Ki; None unless model_type == 'si'.

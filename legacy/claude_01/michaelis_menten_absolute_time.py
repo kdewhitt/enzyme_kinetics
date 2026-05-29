@@ -7,15 +7,16 @@ Incorporates:
 - Peak area → velocity conversion using relative measurements
 
 This script establishes the relationship between peak area and product formation,
-allowing calculation of true kcat in units of s⁻¹ and kcat/Km in M⁻¹·s⁻¹.
+allowing calculation of true kcat in units of s⁻¹ and kcat/Km in s⁻¹·M⁻¹.
 """
 
-import pandas as pd
-import numpy as np
+import warnings
+
 import matplotlib.pyplot as plt
+import numpy as np
+import pandas as pd
 from scipy.optimize import curve_fit
 from scipy.stats import linregress
-import warnings
 
 warnings.filterwarnings("ignore")
 
@@ -542,7 +543,7 @@ Current units are "area·µM⁻¹·sec⁻¹" because:
 - Once you calibrate peak area → µM product formed:
   1. Convert Vmax from (area/sec) → (µM/sec)
   2. All downstream calculations convert automatically
-  3. kcat/Km will be in standard M⁻¹·s⁻¹ units
+  3. kcat/Km will be in standard s⁻¹·M⁻¹ units
 
 NEXT STEPS:
 
@@ -556,9 +557,9 @@ NEXT STEPS:
    - All enzyme kinetics automatically scale to absolute units
 
 3. Compare with literature:
-   - Once in M⁻¹·s⁻¹ units, kcat/Km can be directly compared
-   - Typical enzymes: 10⁴ to 10⁶ M⁻¹·s⁻¹
-   - Excellent enzymes: 10⁷ to 10⁸ M⁻¹·s⁻¹ (near diffusion-limited)
+   - Once in s⁻¹·M⁻¹ units, kcat/Km can be directly compared
+   - Typical enzymes: 10⁴ to 10⁶ s⁻¹·M⁻¹
+   - Excellent enzymes: 10⁷ to 10⁸ s⁻¹·M⁻¹ (near diffusion-limited)
     """)
 
     print(f"{'=' * 90}\n")

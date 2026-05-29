@@ -4,7 +4,7 @@
 
 Your enzyme kinetics data currently expresses Vmax and kcat in terms of **relative peak area units** rather than **absolute product concentration (µM)**. This is because HPLC measures peak area, which is proportional to product amount, but the exact relationship is unknown.
 
-To get truly comparable kinetic parameters (kcat in s⁻¹, kcat/Km in M⁻¹·s⁻¹), you need a **calibration curve**.
+To get truly comparable kinetic parameters (kcat in s⁻¹, kcat/Km in s⁻¹·M⁻¹), you need a **calibration curve**.
 
 ---
 
@@ -147,7 +147,7 @@ for peak_id, group_data in df.groupby('peak_id'):
     
     # Enzyme-normalize
     kcat = Vmax_per_sec / ENZYME_CONCENTRATION_UM  # s⁻¹
-    kcat_over_km = kcat / Km  # M⁻¹·s⁻¹ (now in standard units!)
+    kcat_over_km = kcat / Km  # s⁻¹·M⁻¹ (now in standard units!)
 ```
 
 ---
@@ -156,21 +156,21 @@ for peak_id, group_data in df.groupby('peak_id'):
 
 After applying the calibration, your results will be in **standard enzyme kinetics units**:
 
-| Parameter | Unit | Meaning |
-|-----------|------|---------|
-| **Km** | µM | Substrate concentration (unchanged) |
-| **Vmax** | µM/s | Product formation rate at saturation |
-| **kcat** | s⁻¹ | Turnover number (reactions/enzyme/second) |
-| **kcat/Km** | M⁻¹·s⁻¹ | Catalytic efficiency (standard comparison metric) |
+| Parameter   | Unit    | Meaning                                           |
+|-------------|---------|---------------------------------------------------|
+| **Km**      | µM      | Substrate concentration (unchanged)               |
+| **Vmax**    | µM/s    | Product formation rate at saturation              |
+| **kcat**    | s⁻¹     | Turnover number (reactions/enzyme/second)         |
+| **kcat/Km** | s⁻¹·M⁻¹ | Catalytic efficiency (standard comparison metric) |
 
 ### Typical Values for Reference:
 
-| Enzyme Type | kcat/Km (M⁻¹·s⁻¹) | Example |
-|-------------|------------------|---------|
-| Slow enzymes | 10³ to 10⁴ | Non-optimized variants |
-| Good enzymes | 10⁵ to 10⁶ | Natural wild-type enzymes |
-| Excellent enzymes | 10⁷ to 10⁸ | Highly optimized catalysts |
-| Diffusion-limited | ~10⁸–10⁹ | Theoretical maximum |
+| Enzyme Type       | kcat/Km (s⁻¹·M⁻¹) | Example                    |
+|-------------------|-------------------|----------------------------|
+| Slow enzymes      | 10³ to 10⁴        | Non-optimized variants     |
+| Good enzymes      | 10⁵ to 10⁶        | Natural wild-type enzymes  |
+| Excellent enzymes | 10⁷ to 10⁸        | Highly optimized catalysts |
+| Diffusion-limited | ~10⁸–10⁹          | Theoretical maximum        |
 
 ---
 
@@ -287,6 +287,6 @@ print(f"✓ Calibration plot saved to: calibration_curve.png")
 3. **Apply to kinetics data**
    - Convert Vmax (area) → Vmax (µM)
    - Recalculate kcat and kcat/Km
-   - Compare with literature values in M⁻¹·s⁻¹ units
+   - Compare with literature values in s⁻¹·M⁻¹ units
 
 Once complete, your enzyme kinetics will be in **truly comparable, publishable units**.
