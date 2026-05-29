@@ -214,8 +214,8 @@ def apply_calibration(path: Path, peak_prefixes: frozenset[str] | None, analyzer
     _logger.info("Loaded %d peaks from %s", len(df), path)
 
     for peak_id in df["peak_id"].unique():
-        if peak_id.lower() == "olv":
-            continue
+        # if peak_id.lower() == "olv":
+        #     continue
         sub_df = df[df["peak_id"] == peak_id]
         # 4. Fit calibration model
         model = fit_calibration(sub_df["substrate_conc"], sub_df["mean"], sigma=sub_df["std"])

@@ -108,7 +108,7 @@ def canonicalize_label(value: object) -> str:
         >>> canonicalize_label("olivetolic acid")
         'OLIVETOLIC_ACID'
         >>> canonicalize_label("  OLA  ")
-        'OLA'
+        'OA'
         >>> canonicalize_label("hexanoyl-triacetic acid")
         'HEXANOYL_TRIACETIC_ACID'
     """
