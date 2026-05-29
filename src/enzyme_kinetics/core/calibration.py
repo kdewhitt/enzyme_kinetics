@@ -45,7 +45,7 @@ _logger = RichLogAdapter(component=__name__)
 
 
 # TODO: Update docstrings
-
+# Todo: apply calibration based on peaks
 
 # ---------------------------------------------------------------------
 # Calibration — linear standard curve
@@ -176,8 +176,41 @@ def fit_calibration(
     *,
     sigma: np.ndarray | None = None,
 ) -> Calibration:
-    """Fits a linear calibration curve to HPLC standard data."""
+    """Fits a linear calibration curve to HPLC standard data.
 
+    Coerces concentrations, peak_areas, and sigma (if provided) to float64 via
+    pd.to_numeric(errors="coerce"), then jointly excludes any row where at least
+    one value is non-finite. This makes the function tolerant of mixed-type or
+    partially missing input arrays without raising on individual bad values.
+
+    Fits the model peak_area = slope × [CoA] + intercept using
+    scipy.optimize.curve_fit. When sigma is provided and contains at least one
+    non-zero finite value, weighted least squares is used with absolute_sigma=True
+    so that supplied uncertainties are treated as absolute measurement errors.
+    When sigma is absent or all-zero, OLS is used (absolute_sigma defaults to
+    False inside curve_fit).
+
+    Args:
+        concentrations: Known CoA concentrations of calibration standards in µM.
+            Non-numeric and non-finite values are excluded before fitting.
+        peak_areas: Measured HPLC peak areas corresponding to each standard in
+            area units. Non-numeric and non-finite values are excluded before
+            fitting.
+        sigma: Optional per-point standard errors on peak_areas in area units.
+            Non-numeric and non-finite values cause the corresponding row to be
+            excluded. If None or all-zero after filtering, unweighted fitting is
+            used. Defaults to None.
+
+    Returns:
+        A fitted Calibration instance with slope and intercept in area/µM and
+        area units respectively, their standard errors, R², RMSE in area units,
+        n_points, and conc_range in µM.
+
+    Raises:
+        ValueError: If fewer than two valid (finite) calibration points remain
+            after coercion and non-finite filtering.
+        RuntimeError: If curve_fit fails to converge.
+    """
     concentrations = np.asarray(pd.to_numeric(concentrations, errors="coerce"), dtype=float)
     peak_areas = np.asarray(pd.to_numeric(peak_areas, errors="coerce"), dtype=float)
 
@@ -289,12 +322,14 @@ def save_calibration(cal: Calibration, peak_id: str, path: Path, nice: bool = Fa
     Two output modes are available. When nice is False (default), writes a
     compact JSON file containing slope, slope_se, intercept, intercept_se,
     r_squared, rmse, n_points, and conc_range. When nice is True, writes a
-    formatted plain-text report including the fitted model equation, all
-    parameters with units, RMSE, n_points, the inverse function, and a Python
-    code snippet for embedding the calibration constants.
+    formatted plain-text report including a peak-specific header, the fitted
+    model equation, all parameters with units, RMSE, n_points, the inverse
+    function, and a Python code snippet for embedding the calibration constants.
 
     Args:
         cal: Fitted Calibration instance to serialize.
+        peak_id: HPLC peak identifier included in the header of the nice=True
+            plain-text report. Not written to the JSON output.
         path: Destination file path. The file is created or overwritten.
         nice: If True, writes a human-readable plain-text report. If False,
             writes a compact JSON file suitable for machine consumption.
@@ -324,20 +359,14 @@ def save_calibration(cal: Calibration, peak_id: str, path: Path, nice: bool = Fa
 
             f.write("PARAMETERS:\n")
             f.write(f"  Slope:        {cal.slope:.10f} ± {cal.slope_se:.10f} area/µM\n")
-            f.write(
-                f"  Intercept:    {cal.intercept:.10f} ± {cal.intercept_se:.10f} area\n",
-            )
+            f.write(f"  Intercept:    {cal.intercept:.10f} ± {cal.intercept_se:.10f} area\n")
             f.write(f"  R²:           {cal.r_squared:.10f}\n")
             f.write(f"  RMSE:         {cal.rmse:.6f} area\n")
             f.write(f"  N points:     {cal.n_points}\n")
-            f.write(
-                f"  Conc range:   {cal.conc_range[0]:.2f}–{cal.conc_range[1]:.2f} µM\n\n",
-            )
+            f.write(f"  Conc range:   {cal.conc_range[0]:.2f}–{cal.conc_range[1]:.2f} µM\n\n")
 
             f.write("INVERSE FUNCTION:\n")
-            f.write(
-                f"  [concentration] = (peak_area - {cal.intercept:.10f}) / {cal.slope:.10f}\n\n",
-            )
+            f.write(f"  [concentration] = (peak_area - {cal.intercept:.10f}) / {cal.slope:.10f}\n\n")
 
             f.write("PYTHON CODE:\n")
             f.write("```python\n")
