@@ -1,6 +1,6 @@
 [project]
 name = "enzyme-kinetics"
-version = "0.1.0"
+version = "0.1.1"
 description = "Compute Michaelis-Menten enzyme kinetics."
 readme = "README.md"
 authors = [
