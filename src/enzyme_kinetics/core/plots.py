@@ -27,24 +27,22 @@ Typical usage example:
 from __future__ import annotations
 
 from pathlib import Path
-from typing import Any, Self, TYPE_CHECKING
+from typing import Any, Self
 
 import matplotlib.pyplot as plt
 import numpy as np
+import pandas as pd
 from kgdlibs.pathtools import PathBuilder
-from logurich import RichLogAdapter
+from logurich import DuoLogAdapter
 
+from .calibration import Calibration
+from .derive import KineticConstants
 from .models import lineweaver_burk_transform
 from .preprocess import extract_peak_data
 
-if TYPE_CHECKING:
-    from .derive import KineticConstants
-    from .calibration import Calibration
-    import pandas as pd
-
 __all__ = ["KineticPlots"]
 
-_logger = RichLogAdapter(component=__name__)
+_logger = DuoLogAdapter.create(component=__name__)
 
 # Display name overrides for known peak identifiers.
 _LABEL_MAP = {

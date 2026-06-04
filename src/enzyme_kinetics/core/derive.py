@@ -25,13 +25,13 @@ from dataclasses import dataclass
 from typing import Any
 
 import numpy as np
-from logurich import RichLogAdapter
+from logurich import DuoLogAdapter
 
 from .models import FitResult
 
 __all__ = ["derive_constants", "KineticConstants"]
 
-_logger = RichLogAdapter(component=__name__)
+_logger = DuoLogAdapter.create(component=__name__)
 
 # ---------------------------------------------------------------------
 # kcat/Km error propagation using full covariance matrix

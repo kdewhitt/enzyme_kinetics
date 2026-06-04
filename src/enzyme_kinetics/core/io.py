@@ -3,13 +3,11 @@
 from __future__ import annotations
 
 import re
-from typing import Any, TYPE_CHECKING
+from pathlib import Path
+from typing import Any
 
 import pandas as pd
 from kgdlibs.datatools import clean_names
-
-if TYPE_CHECKING:
-    from pathlib import Path
 
 __all__ = ["drop_indexlike_columns", "load_plottable_data"]
 

@@ -30,6 +30,10 @@ build-backend = "uv_build"
 [tool.uv]
 link-mode = "copy"
 
+[tool.uv.sources]
+kgdlibs = { git = "https://github.com/kdewhitt/kgdlibs.git" }
+logurich = { git = "https://github.com/kdewhitt/logurich.git" }
+
 [tool.ruff]
 line-length = 99
 exclude = [
@@ -49,17 +53,16 @@ extend-select = [
     "E", # pycodestyle errors
     "F", # pyflakes
     "SIM", # simplify
-    "TCH", # type-checking imports
+    # "TCH", # type-checking imports
     "UP", # pyupgrade
     "W", # pycodestyle warnings
 ]
 
-ignore = ["D203", "D213"]  # common conflicts
+# common conflicts
+ignore = ["D203", "D213"]
 
-per-file-ignores = {
-    "tests/*" = ["S101"], # allow assert in tests
-    "scripts/*" = ["T201"], # allow print()
-}
+# allow `assert` in tests and `print()` in scripts
+per-file-ignores = { "tests/*" = ["S101"], "scripts/*" = ["T201"] }
 
 [tool.ruff.lint.pydocstyle]
 convention = "google"
@@ -68,10 +71,6 @@ convention = "google"
 quote-style = "double"
 indent-style = "space"
 skip-magic-trailing-comma = false  # allow trailing commas
-
-[tool.uv.sources]
-kgdlibs = { git = "https://github.com/kdewhitt/kgdlibs.git" }
-logurich = { git = "https://github.com/kdewhitt/logurich.git" }
 
 [dependency-groups]
 dev = [

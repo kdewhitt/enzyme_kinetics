@@ -6,13 +6,9 @@
 # MEDIUM priority
 - [ ] Determine units for Km and Vmax and other parameters
 - [ ] Determine units for all inputs, e.g., substrate_conc (in µM)
-- 
+ 
 # LOW priority
-
 - [ ] Run claude to analyze for unused parameters and attributes across codebase
-
-
-
 
 # Observations/ Comments/ Notes
 - Vmax : area per minute // need a product standard curve to convert to uM per minute

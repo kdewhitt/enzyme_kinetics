@@ -20,18 +20,16 @@ Typical usage example:
 
 from __future__ import annotations
 
+from collections.abc import Callable
 from dataclasses import dataclass, field
-from typing import Any, TYPE_CHECKING
+from typing import Any
 
 import numpy as np
-from logurich import RichLogAdapter
+from logurich import DuoLogAdapter
 from scipy.optimize import curve_fit
 from scipy.stats import linregress
 
-if TYPE_CHECKING:
-    from collections.abc import Callable
-
-_logger = RichLogAdapter(component=__name__)
+_logger = DuoLogAdapter.create(component=__name__)
 
 __all__ = [
     "fit_hill",

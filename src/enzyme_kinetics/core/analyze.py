@@ -23,25 +23,23 @@ Typical usage example:
 from __future__ import annotations
 
 import contextlib
-from typing import Self, TYPE_CHECKING
+from pathlib import Path
+from typing import Self
 
 import numpy as np
 import pandas as pd
 from kgdlibs.pathtools import PathBuilder
-from logurich import RichLogAdapter
+from logurich import DuoLogAdapter
 
+from .calibration import Calibration
 from .derive import derive_constants, KineticConstants
 from .models import fit_hill, fit_lineweaver_burk, fit_michaelis_menten, FitResult
 from .plots import KineticPlots
 from .preprocess import extract_peak_data
 
-if TYPE_CHECKING:
-    from .calibration import Calibration
-    from pathlib import Path
-
 __all__ = ["analyze_peaks", "KineticAnalyzer"]
 
-_logger = RichLogAdapter(component=__name__)
+_logger = DuoLogAdapter.create(component=__name__)
 
 
 # ---------------------------------------------------------------------

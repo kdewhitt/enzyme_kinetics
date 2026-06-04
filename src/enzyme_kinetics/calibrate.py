@@ -7,7 +7,7 @@ from pathlib import Path
 from typing import Annotated
 
 import tyro
-from logurich import configure_richloguru, RichLogAdapter
+from logurich import DuoLogAdapter
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 from rich.console import Console
 
@@ -18,8 +18,7 @@ from enzyme_kinetics.core import (
 )
 from enzyme_kinetics.core.calibration import fit_calibration, plot_calibration, save_calibration
 
-configure_richloguru(level="INFO")
-_logger = RichLogAdapter(component=__name__)
+_logger = DuoLogAdapter.create(component=__name__)
 
 # Environment setup for Rich
 os.environ.setdefault("FORCE_COLOR", "1")

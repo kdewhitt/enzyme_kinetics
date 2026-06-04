@@ -23,18 +23,15 @@ from __future__ import annotations
 
 import json
 from dataclasses import dataclass
-from typing import TYPE_CHECKING
+from pathlib import Path
 
 import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
-from logurich import RichLogAdapter
+from logurich import DuoLogAdapter
 from scipy.optimize import curve_fit
 
 from .models import r_squared
-
-if TYPE_CHECKING:
-    from pathlib import Path
 
 __all__ = [
     "Calibration",
@@ -44,7 +41,7 @@ __all__ = [
     "save_calibration",
 ]
 
-_logger = RichLogAdapter(component=__name__)
+_logger = DuoLogAdapter.create(component=__name__)
 
 
 # ---------------------------------------------------------------------

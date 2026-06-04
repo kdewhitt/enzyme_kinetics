@@ -2,11 +2,10 @@
 
 from __future__ import annotations
 
-from typing import Final, TYPE_CHECKING
+from typing import Final
 
-if TYPE_CHECKING:
-    import pandas as pd
-    import numpy as np
+import numpy as np
+import pandas as pd
 
 __all__ = [
     "COUNT",
