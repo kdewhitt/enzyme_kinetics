@@ -12,7 +12,7 @@ respectively) only after a calibration curve has been applied upstream so that
 Vmax is in µM/s. Before calibration both quantities are in non-physical units
 and should not be compared to literature values.
 
-Typical usage example:
+Typical usage:
     >>> from enzyme_kinetics.core.models import fit_michaelis_menten
     >>> fit = fit_michaelis_menten(s, v)
     >>> constants = derive_constants("HexCoA", "peak_1", fit, enzyme_conc_um=0.5)

@@ -10,7 +10,7 @@ peaks listed in special_peaks and defaults to fit_michaelis_menten otherwise.
 Lineweaver-Burk cross-validation fits are attempted for every peak and stored on
 the KineticConstants result; failures are logged and silently skipped.
 
-Typical usage example:
+Typical usage:
     >>> analyzer = KineticAnalyzer(
     ...     enzyme_conc_um=0.5,
     ...     reaction_time_seconds=3600.0,

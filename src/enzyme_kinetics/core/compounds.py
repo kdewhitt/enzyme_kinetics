@@ -12,7 +12,7 @@ annotated alias for Pydantic models, and pre-built ordering constants
 (CATEGORICAL_ORDER, CATEGORICAL_ORDER_EXTENDED) for use in axis sorting
 and categorical assignment workflows.
 
-Typical usage example:
+Typical usage:
     >>> compound = Compounds.resolve("olivetolic acid")
     >>> df = canonicalize_peak_ids(df, column="peak_id", prefixes=["C5", "C6"])
     >>> df["peak_id"].cat.categories.tolist()

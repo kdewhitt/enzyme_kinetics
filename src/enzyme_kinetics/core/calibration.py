@@ -10,7 +10,7 @@ Assumes a linear detector response (Beer-Lambert regime) across the working
 concentration range. For typical CoA/HPLC calibrations R² ≥ 0.999 is expected;
 the is_valid() guard enforces this threshold before results are used downstream.
 
-Typical usage example:
+Typical usage:
     >>> import numpy as np
     >>> conc = np.array([0.0, 1.0, 5.0, 10.0, 25.0, 50.0])
     >>> area = np.array([0.0, 120.3, 601.2, 1198.4, 3005.1, 5997.8])

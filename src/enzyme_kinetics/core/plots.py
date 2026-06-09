@@ -9,7 +9,7 @@ double-reciprocal panels, MM fit residuals, and a four-panel efficiency comparis
 bar chart (Km, Vmax, kcat, kcat/Km). Each method accepts a show flag for interactive
 display and a cols argument for grid layout control.
 
-Typical usage example:
+Typical usage:
     >>> plotter = KineticPlots(
     ...     dest / "results.png",
     ...     data=df,

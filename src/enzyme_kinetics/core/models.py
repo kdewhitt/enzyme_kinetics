@@ -10,7 +10,7 @@ Substrate concentrations (s) passed to any fitting function must be in µM for K
 and derived constants to carry their stated units. No runtime unit check is
 performed; the caller is responsible for unit consistency.
 
-Typical usage example:
+Typical usage:
     >>> import numpy as np
     >>> s = np.array([1.0, 5.0, 10.0, 50.0, 100.0])
     >>> v = np.array([0.1, 0.3, 0.5, 0.8, 0.9])
