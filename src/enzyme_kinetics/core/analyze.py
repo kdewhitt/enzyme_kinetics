@@ -284,9 +284,10 @@ class KineticAnalyzer:
                         )[1]
                         / self.reaction_time_seconds
                         for area, area_std in zip(
-                        mean_signal,
-                        v_std_raw, strict=False,
-                    )
+                            mean_signal,
+                            v_std_raw,
+                            strict=False,
+                        )
                     ],
                 )
             else:

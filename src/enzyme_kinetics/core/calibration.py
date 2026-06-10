@@ -44,7 +44,6 @@ __all__ = [
 _logger = DuoLogAdapter.create(component=__name__)
 
 
-
 @dataclass(frozen=True, slots=True)
 class Calibration:
     """Linear HPLC calibration curve parameters and conversion methods.
@@ -146,7 +145,7 @@ class Calibration:
         """
         conc = float(self.area_to_conc(area))
         dc_da = 1.0 / self.slope
-        dc_ds = -(area - self.intercept) / (self.slope ** 2)
+        dc_ds = -(area - self.intercept) / (self.slope**2)
         dc_di = -1.0 / self.slope  # FIX 2: intercept term
         conc_std = float(
             np.sqrt(

@@ -84,7 +84,7 @@ def hill_equation(s: np.ndarray, vmax: float, k_half: float, n: float) -> np.nda
     Returns:
         Reaction velocity array in the same units as vmax.
     """
-    return (vmax * s ** n) / (k_half ** n + s ** n)
+    return (vmax * s**n) / (k_half**n + s**n)
 
 
 def threshold_michaelis_menten(
@@ -139,7 +139,7 @@ def substrate_inhibition(
     Returns:
         Reaction velocity array in the same units as vmax.
     """
-    return (vmax * s) / (km + s + (s ** 2) / ki)
+    return (vmax * s) / (km + s + (s**2) / ki)
 
 
 def lineweaver_burk_transform(
@@ -543,7 +543,7 @@ def fit_lineweaver_burk(s: np.ndarray, v: np.ndarray) -> FitResult:
     """
     s_inv, v_inv = lineweaver_burk_transform(s, v)
     slope, intercept, r_value, _, std_err = linregress(s_inv, v_inv)
-    r2 = r_value ** 2
+    r2 = r_value**2
     vmax = 1.0 / intercept if intercept != 0 else np.nan
     km = slope * vmax if not np.isnan(vmax) else np.nan
     # LB std errors live in reciprocal space and do not map cleanly to parameter

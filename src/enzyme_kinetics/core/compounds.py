@@ -260,8 +260,7 @@ def _build_compound_lookup() -> dict[str, Compounds]:
 
             if existing is not None and existing is not member:
                 raise ValueError(
-                    f"Collision: {key!r} maps to both "
-                    f"{existing.value!r} and {member.value!r}",
+                    f"Collision: {key!r} maps to both {existing.value!r} and {member.value!r}",
                 )
 
             lookup[normalized] = member
@@ -280,11 +279,7 @@ CATEGORICAL_ORDER: Final[tuple[str, ...]] = Compounds.values()
 
 CATEGORICAL_ORDER_EXTENDED: Final[tuple[str, ...]] = (
     *CATEGORICAL_ORDER,
-    *(
-        f"{prefix}-{compound}"
-        for prefix in COMPOUND_PREFIXES
-        for compound in CATEGORICAL_ORDER
-    ),
+    *(f"{prefix}-{compound}" for prefix in COMPOUND_PREFIXES for compound in CATEGORICAL_ORDER),
 )
 """Extended categorical order including all prefix-compound combinations after base compounds."""
 
