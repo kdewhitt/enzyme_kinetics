@@ -11,13 +11,10 @@ from logurich import DuoLogAdapter
 from pydantic import BaseModel, computed_field, ConfigDict, Field, field_validator
 from rich.console import Console
 
-from enzyme_kinetics.core import (
-    canonicalize_peak_ids,
-    FlexPeakPrefixes,
-    KineticAnalyzer,
-    load_plottable_data,
-)
-from enzyme_kinetics.core.calibration import fit_calibration
+from .core.analyze import KineticAnalyzer
+from .core.calibration import fit_calibration
+from .core.compounds import canonicalize_peak_ids, FlexPeakPrefixes
+from .core.io import load_plottable_data
 
 _logger = DuoLogAdapter.create(component=__name__)
 

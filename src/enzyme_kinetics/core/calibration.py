@@ -11,12 +11,12 @@ concentration range. For typical CoA/HPLC calibrations R² ≥ 0.999 is expected
 the is_valid() guard enforces this threshold before results are used downstream.
 
 Typical usage:
-    >>> import numpy as np
-    >>> conc = np.array([0.0, 1.0, 5.0, 10.0, 25.0, 50.0])
-    >>> area = np.array([0.0, 120.3, 601.2, 1198.4, 3005.1, 5997.8])
-    >>> cal = fit_calibration(conc, area)
-    >>> print(cal.r_squared)
-    >>> conc_um, conc_std = cal.area_to_conc_with_error(1200.0, 15.0)
+    import numpy as np
+    conc = np.array([0.0, 1.0, 5.0, 10.0, 25.0, 50.0])
+    area = np.array([0.0, 120.3, 601.2, 1198.4, 3005.1, 5997.8])
+    cal = fit_calibration(conc, area)
+    print(cal.r_squared)
+    conc_um, conc_std = cal.area_to_conc_with_error(1200.0, 15.0)
 """
 
 from __future__ import annotations
@@ -43,10 +43,6 @@ __all__ = [
 
 _logger = DuoLogAdapter.create(component=__name__)
 
-
-# ---------------------------------------------------------------------
-# Calibration — linear standard curve
-# ---------------------------------------------------------------------
 
 
 @dataclass(frozen=True, slots=True)
@@ -160,11 +156,6 @@ class Calibration:
             ),
         )
         return conc, conc_std
-
-
-# ---------------------------------------------------------------------
-# Fitting — thin wrappers around curve_fit
-# ---------------------------------------------------------------------
 
 
 def fit_calibration(

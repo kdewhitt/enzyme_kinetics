@@ -1,1 +1,1 @@
-"""Enzyme kinetics module for modeling enzyme-catalyzed reactions."""
+"""enzyme_kinetics — A package for modeling enzyme-catalyzed reactions."""

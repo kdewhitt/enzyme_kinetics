@@ -33,10 +33,6 @@ __all__ = ["derive_constants", "KineticConstants"]
 
 _logger = DuoLogAdapter.create(component=__name__)
 
-# ---------------------------------------------------------------------
-# kcat/Km error propagation using full covariance matrix
-# ---------------------------------------------------------------------
-
 # Unit conversion factor: µM → M.
 _UM_TO_M: float = 1e-6
 
@@ -106,11 +102,6 @@ def _kcat_km_with_covariance(
     )
     kcat_km_std_M = float(np.sqrt(max(var_kcat_km, 0.0)))  # clamp numerical negatives
     return float(kcat_km_M), kcat_km_std_M
-
-
-# ---------------------------------------------------------------------
-# Derived kinetic constants
-# ---------------------------------------------------------------------
 
 
 @dataclass(frozen=True, slots=True)

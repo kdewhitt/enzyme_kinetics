@@ -11,13 +11,13 @@ Lineweaver-Burk cross-validation fits are attempted for every peak and stored on
 the KineticConstants result; failures are logged and silently skipped.
 
 Typical usage:
-    >>> analyzer = KineticAnalyzer(
-    ...     enzyme_conc_um=0.5,
-    ...     reaction_time_seconds=3600.0,
-    ...     substrate="HexCoA",
-    ...     data=df,
-    ... )
-    >>> analyzer.fit().apply_calibration(cal).export_csv(dest)
+    analyzer = KineticAnalyzer(
+        enzyme_conc_um=0.5,
+        reaction_time_seconds=3600.0,
+        substrate="HexCoA",
+        data=df,
+    )
+    analyzer.fit().apply_calibration(cal).export_csv(dest)
 """
 
 from __future__ import annotations
@@ -40,11 +40,6 @@ from .preprocess import extract_peak_data
 __all__ = ["analyze_peaks", "KineticAnalyzer"]
 
 _logger = DuoLogAdapter.create(component=__name__)
-
-
-# ---------------------------------------------------------------------
-# Model selection strategy
-# ---------------------------------------------------------------------
 
 
 def _select_and_fit(
@@ -80,11 +75,6 @@ def _select_and_fit(
     # if peak_id.lower() == "olv":
     #     return fit_threshold_michaelis_menten(s, v, sigma=v_std)
     return fit_michaelis_menten(s, v, sigma=v_std)
-
-
-# ---------------------------------------------------------------------
-# Orchestrator
-# ---------------------------------------------------------------------
 
 
 class KineticAnalyzer:
@@ -362,7 +352,7 @@ class KineticAnalyzer:
             plotter.plot()
             .plot_lineweaver_burk()
             .plot_residuals()
-            .plot_efficiency_comparison(exclude="OLV")
+            .plot_efficiency_comparison(exclude={"OLV"})
         )
         return self
 

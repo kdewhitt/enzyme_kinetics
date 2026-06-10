@@ -44,11 +44,6 @@ __all__ = [
 ]
 
 
-# ---------------------------------------------------------------------
-# Validators
-# ---------------------------------------------------------------------
-
-
 def coerce_peak_prefixes(value: Any) -> frozenset[str] | None:
     """Normalizes and merges peak prefix input with the default COMPOUND_PREFIXES set.
 
@@ -80,10 +75,6 @@ FlexPeakPrefixes = Annotated[
     BeforeValidator(coerce_peak_prefixes),
 ]
 """Annotated type alias applying coerce_peak_prefixes as a Pydantic BeforeValidator."""
-
-# ---------------------------------------------------------------------
-# Compounds - parsing, categorization, and label formatting
-# ---------------------------------------------------------------------
 
 # Pre-compiled pattern matching any run of non-alphanumeric characters for label normalization.
 _NORM_RE: Final = re.compile(r"[^A-Z0-9]+")
@@ -296,11 +287,6 @@ CATEGORICAL_ORDER_EXTENDED: Final[tuple[str, ...]] = (
     ),
 )
 """Extended categorical order including all prefix-compound combinations after base compounds."""
-
-
-# ---------------------------------------------------------------------
-# Canonicalization
-# ---------------------------------------------------------------------
 
 
 def _ensure_column_exists(df: pd.DataFrame, column: str) -> None:

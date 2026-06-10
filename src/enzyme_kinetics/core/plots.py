@@ -10,18 +10,18 @@ bar chart (Km, Vmax, kcat, kcat/Km). Each method accepts a show flag for interac
 display and a cols argument for grid layout control.
 
 Typical usage:
-    >>> plotter = KineticPlots(
-    ...     dest / "results.png",
-    ...     data=df,
-    ...     results=analyzer.results,
-    ...     reaction_time_seconds=3600.0,
-    ... )
-    >>> (
-    ...     plotter.plot()
-    ...     .plot_lineweaver_burk()
-    ...     .plot_residuals()
-    ...     .plot_efficiency_comparison()
-    ... )
+    plotter = KineticPlots(
+        dest / "results.png",
+        data=df,
+        results=analyzer.results,
+        reaction_time_seconds=3600.0,
+    )
+    (
+        plotter.plot()
+        .plot_lineweaver_burk()
+        .plot_residuals()
+        .plot_efficiency_comparison()
+    )
 """
 
 from __future__ import annotations

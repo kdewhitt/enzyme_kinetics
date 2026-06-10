@@ -11,11 +11,11 @@ and derived constants to carry their stated units. No runtime unit check is
 performed; the caller is responsible for unit consistency.
 
 Typical usage:
-    >>> import numpy as np
-    >>> s = np.array([1.0, 5.0, 10.0, 50.0, 100.0])
-    >>> v = np.array([0.1, 0.3, 0.5, 0.8, 0.9])
-    >>> result = fit_michaelis_menten(s, v)
-    >>> print(result.km, result.vmax)
+    import numpy as np
+    s = np.array([1.0, 5.0, 10.0, 50.0, 100.0])
+    v = np.array([0.1, 0.3, 0.5, 0.8, 0.9])
+    result = fit_michaelis_menten(s, v)
+    print(result.km, result.vmax)
 """
 
 from __future__ import annotations
@@ -46,11 +46,6 @@ __all__ = [
     "substrate_inhibition",
     "threshold_michaelis_menten",
 ]
-
-
-# ---------------------------------------------------------------------
-# Pure Mathematical Functions — no classes, no state
-# ---------------------------------------------------------------------
 
 
 def michaelis_menten(s: np.ndarray, vmax: float, km: float) -> np.ndarray:
@@ -170,11 +165,6 @@ def lineweaver_burk_transform(
     """
     mask = (s > 0) & (v > 0)
     return 1.0 / s[mask], 1.0 / v[mask]
-
-
-# ---------------------------------------------------------------------
-# Fit Result — frozen, model-agnostic
-# ---------------------------------------------------------------------
 
 
 @dataclass(frozen=True, slots=True)
@@ -311,11 +301,6 @@ def r_squared(observed: np.ndarray, predicted: np.ndarray) -> float:
     if ss_tot == 0:
         return 0.0
     return 1.0 - (ss_res / ss_tot)
-
-
-# ---------------------------------------------------------------------
-# Fitting — thin wrappers around curve_fit
-# ---------------------------------------------------------------------
 
 
 def fit_model(

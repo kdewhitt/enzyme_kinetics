@@ -33,11 +33,6 @@ COUNT: Final = "count"
 """DataFrame column name for replicate count per group."""
 
 
-# ---------------------------------------------------------------------
-# Velocity preparation from summary-statistics DataFrames
-# ---------------------------------------------------------------------
-
-
 def prepare_velocity(
     s: np.ndarray,
     mean_signal: np.ndarray,
@@ -67,11 +62,6 @@ def prepare_velocity(
     v = mean_signal / rxn_time
     v_std = std_signal / rxn_time
     return s, v, v_std, mean_signal
-
-
-# ---------------------------------------------------------------------
-# Per-peak data extraction
-# ---------------------------------------------------------------------
 
 
 def extract_peak_data(
