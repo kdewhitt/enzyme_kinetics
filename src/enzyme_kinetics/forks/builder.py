@@ -158,8 +158,7 @@ class PathBuilder:
             raise ValueError(f"source_version cannot be negative, got {self.source_version}.")
         if self.version_floor is not None and not 1 <= self.version_floor <= _MAX_VERSION:
             raise ValueError(
-                f"version_floor must fall between 1 and {_MAX_VERSION}, "
-                f"got {self.version_floor}.",
+                f"version_floor must fall between 1 and {_MAX_VERSION}, got {self.version_floor}.",
             )
 
     @classmethod
@@ -282,70 +281,6 @@ class PathBuilder:
             source_version=0,
             create=create,
         )
-
-    # @classmethod
-    # def from_path(
-    #     cls,
-    #     destination: str | Path,
-    #     *,
-    #     extension: str | None = None,
-    #     overwrite: bool = False,
-    #     max_name_bytes: int = 255,
-    #     max_path_chars: int | None = None,
-    #     preserve_unicode: bool = False,
-    #     expanduser: bool = True,
-    #     resolve: bool = False,
-    #     create: bool = False,
-    # ) -> Self:
-    #     """Construct a builder from a path of unknown kind, probing disk first.
-    #
-    #     An existing directory dispatches to for_directory and anything else to
-    #     for_file. Prefer the explicit constructors when the kind is known, and
-    #     for_target for a user-supplied destination that should fall back to a
-    #     default filename, since the guess for a path that does not exist yet
-    #     rests only on the presence of an extension.
-    #
-    #     Args:
-    #         destination: Path to derive the initial state from. It may name
-    #             either a file or a directory.
-    #         extension: File extension to use instead of the one carried by
-    #             destination, normalized to a single leading dot. If None, the
-    #             extension on destination is used.
-    #         overwrite: If True, an existing file at the resolved path is
-    #             overwritten rather than triggering version numbering.
-    #         max_name_bytes: Maximum length of the resulting filename, in UTF-8
-    #             bytes. Defaults to 255.
-    #         max_path_chars: Upper bound on the length of the full resolved path.
-    #             If None, path length goes unchecked.
-    #         preserve_unicode: If True, unicode letters and digits survive
-    #             sanitization instead of being replaced with underscores.
-    #         expanduser: If True, a leading tilde in destination is expanded.
-    #             Defaults to True.
-    #         resolve: If True, destination is resolved to an absolute path with
-    #             symlinks followed.
-    #         create: If True, the destination directory is created on disk.
-    #
-    #     Returns:
-    #         A new PathBuilder seeded from destination.
-    #
-    #     Raises:
-    #         ValueError: If extension holds no usable characters, or if a numeric
-    #             bound falls outside its permitted range.
-    #     """
-    #     path = cls._normalize_destination(destination, expanduser=expanduser, resolve=resolve)
-    #     constructor = cls.for_directory if cls._names_directory(path) else cls.for_file
-    #
-    #     return constructor(
-    #         path,
-    #         extension=extension,
-    #         overwrite=overwrite,
-    #         max_name_bytes=max_name_bytes,
-    #         max_path_chars=max_path_chars,
-    #         preserve_unicode=preserve_unicode,
-    #         expanduser=False,
-    #         resolve=False,
-    #         create=create,
-    #     )
 
     @classmethod
     def for_target(
