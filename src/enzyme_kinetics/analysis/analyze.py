@@ -387,13 +387,13 @@ class KineticAnalyzer:
             return self
 
         out_path = (
-            PathBuilder.from_path(
+            PathBuilder.for_target(
                 dest,
-                suffix=".csv",
+                extension=".csv",
                 overwrite=overwrite,
             )
             .with_tag("kinetics")
-            .path
+            .reserve()
         )
         stats_df.to_csv(out_path, index=False)
         logger.info("Exported {} rows to {}", len(stats_df), out_path)

@@ -113,7 +113,7 @@ class KineticPlots:
 
     def _make_builder(self) -> PathBuilder:
         """Returns a PathBuilder seeded with the acquisition date and destination path."""
-        return PathBuilder.from_path(self.path, suffix=".png", overwrite=self.overwrite)
+        return PathBuilder.for_target(self.path, extension=".png", overwrite=self.overwrite)
 
     def plot(self, *, show: bool = False, cols: int = 2) -> Self:
         """Plots MM (or Hill) fit curves for all peaks in a multi-panel grid.

@@ -33,7 +33,7 @@ os.environ.setdefault("FORCE_COLOR", "1")
 os.environ.setdefault("TERM", "xterm-256color")
 
 
-def main(args: CalibrationArgs) -> None:
+def run_calibration_pipeline(args: CalibrationArgs) -> None:
     """Executes the per-peak HPLC calibration pipeline from CLI arguments.
 
     Loads and validates the input DataFrame, canonicalizes peak identifiers,
@@ -89,5 +89,20 @@ def main(args: CalibrationArgs) -> None:
     logger.success("Analysis complete.")
 
 
+def main():
+    """Fit per-peak HPLC calibration curves and write a report and plot for each peak.
+
+    Reads a PeakAnalyzer CSV of calibration standards from PATH and writes a
+    parameter report and diagnostic plot per peak alongside OUTFILE. Pass
+    --no-pretty to write the parameters as JSON instead of a text report.
+    """
+    args = tyro.cli(
+        CalibrationArgs,
+        description="Fit calibration curves to enzyme kinetics data.",
+        compact_help=True,
+    )
+    run_calibration_pipeline(args)
+
+
 if __name__ == "__main__":
-    main(tyro.cli(CalibrationArgs))
+    main()

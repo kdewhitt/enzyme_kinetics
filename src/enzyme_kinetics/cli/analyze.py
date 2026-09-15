@@ -63,7 +63,7 @@ def apply_calibration(
     return analyzer
 
 
-def main(args: KineticArgs) -> None:
+def run_enzyme_kinetic_analysis_pipeline(args: KineticArgs) -> None:
     """Executes the full enzyme kinetics analysis pipeline from CLI arguments.
 
     Loads and validates the input DataFrame, canonicalizes peak identifiers,
@@ -100,7 +100,7 @@ def main(args: KineticArgs) -> None:
 
     # 3. Sort data (defensive guard)
     df.sort_values(by=["peak_id", "substrate_conc"], inplace=True)
-    logger.info("Loaded %d peaks from %s", len(df), args.path)
+    logger.info("Loaded %d peaks from {}", len(df), args.path)
 
     # 4. Initialize pipeline
     analyzer = KineticAnalyzer(
@@ -142,5 +142,20 @@ def main(args: KineticArgs) -> None:
     )
 
 
+def main():
+    """Fit kinetic models to each HPLC peak and write results and plots to a directory.
+
+    Reads a PeakAnalyzer CSV of assay data from PATH and writes a kinetic
+    constants CSV and diagnostic plots to TARGET_DIR. Pass --calibration-path
+    with a standards CSV to report kcat and kcat/Km in physical units.
+    """
+    args = tyro.cli(
+        KineticArgs,
+        description="Analyze enzyme kinetics data.",
+        compact_help=True,
+    )
+    run_enzyme_kinetic_analysis_pipeline(args)
+
+
 if __name__ == "__main__":
-    main(tyro.cli(KineticArgs))
+    main()
