@@ -34,9 +34,10 @@ class KineticArgs(BaseModel):
         path: Path to the pre-aggregated PeakAnalyzer CSV file to process.
         target_dir: Destination directory where output CSV and plot files
             are written.
-        calibration_path: Optional path to a fitted Calibration JSON file
-            produced by fit_calibration(). If provided, apply_calibration()
-            is called after fit() to convert velocities to µM/s and produce
+        calibration_path: Optional path to a calibration standards CSV in the
+            same PeakAnalyzer format as path (not a saved Calibration JSON).
+            If provided, a calibration curve is fitted per peak and applied
+            after fit() to convert velocities to µM/s and produce
             physically meaningful kcat (s⁻¹) and kcat/Km (M⁻¹·s⁻¹) values.
             If None, kcat and kcat/Km are computed from raw area velocities
             and carry non-physical units. Defaults to None.

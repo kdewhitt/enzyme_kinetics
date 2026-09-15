@@ -336,12 +336,15 @@ def fit_model(
     maxfev: int = 10_000,
     model_type: str = "mm",
 ) -> FitResult:
-    """Fits a kinetic model function to substrate-velocity data via Levenberg-Marquardt.
+    """Fits a kinetic model function to substrate-velocity data via bounded least squares.
 
-    Delegates to scipy.optimize.curve_fit with absolute_sigma=True so that
-    supplied per-point standard errors are treated as absolute measurement
-    uncertainties rather than relative weights. The full parameter covariance
-    matrix is stored in FitResult.pcov for downstream correlated error propagation.
+    Delegates to scipy.optimize.curve_fit; because bounds are always supplied,
+    curve_fit uses the trust-region reflective ('trf') method. When a usable sigma
+    is available, absolute_sigma=True so that per-point standard errors are
+    treated as absolute measurement uncertainties rather than relative weights.
+    Unweighted fits use absolute_sigma=False, scaling the covariance by the
+    residual variance. The full parameter covariance matrix is stored in
+    FitResult.pcov for downstream correlated error propagation.
 
     Args:
         model_func: Callable with signature f(s, *params) -> np.ndarray representing
@@ -461,7 +464,7 @@ def fit_threshold_michaelis_menten(
         km_init: Initial guess for Km in µM. Defaults to median(s).
 
     Returns:
-        FitResult with model_type="mm", Km in µM, S0 in popt[2], and full pcov matrix.
+        FitResult with model_type="tmm", Km in µM, S0 in µM (popt[2]), and full pcov matrix.
 
     Raises:
         RuntimeError: If curve_fit fails to converge within the default maxfev.

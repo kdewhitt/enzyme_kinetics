@@ -69,8 +69,11 @@ class KineticPlots:
         overwrite: Whether existing plot files at the resolved output paths
             are overwritten by PathBuilder.
         calibrated: Whether the velocities in results were produced after
-            applying a calibration curve. Controls the velocity axis unit
-            label in plot(): "µM/s" when True, "area/s" when False.
+            applying a calibration curve. Controls velocity unit labels in all
+            plots ("µM/s" when True, "area/s" when False) and whether observed
+            points are converted with the matching entry in calibrations.
+        calibrations: Mapping of peak_id to the Calibration used to convert
+            observed peak areas to µM/s when calibrated is True.
     """
 
     def __init__(
@@ -112,7 +115,7 @@ class KineticPlots:
         self.calibrations = calibrations or {}
 
     def _make_builder(self) -> PathBuilder:
-        """Returns a PathBuilder seeded with the acquisition date and destination path."""
+        """Returns a PNG PathBuilder for the base path, creating its directory if needed."""
         return PathBuilder.for_target(
             self.path,
             extension=".png",

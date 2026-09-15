@@ -104,8 +104,8 @@ class KineticAnalyzer:
             model dispatch (e.g. {"peakA": "hill"}).
         results: Mapping of peak_id to KineticConstants populated by fit() or
             apply_calibration().
-        calibration: Most recently applied Calibration object, or None if
-            apply_calibration() has not been called.
+        calibrations: Mapping of peak_id to the Calibration most recently
+            applied to that peak by apply_calibration(); empty until then.
     """
 
     def __init__(
@@ -147,11 +147,11 @@ class KineticAnalyzer:
         all previous results. For each unique peak_id, extracts substrate-velocity
         data via extract_peak_data, selects and fits the primary kinetic model via
         _select_and_fit, and attempts a Lineweaver-Burk cross-validation fit.
-        Lineweaver-Burk failures are silently swallowed; primary model failures are
-        logged as warnings and the peak is skipped.
+        Lineweaver-Burk failures are logged as warnings and lb_fit is left None;
+        primary model failures are logged as warnings and the peak is skipped.
 
         kcat and kcat/Km computed from raw-area fits carry non-physical units
-        (area · µM⁻¹ · s⁻¹ and area · M⁻¹ · s⁻¹ respectively) until
+        (area · µM⁻¹ · s⁻¹ and area · µM⁻¹ · s⁻¹ · M⁻¹ respectively) until
         apply_calibration() is called.
 
         Returns:
@@ -203,17 +203,21 @@ class KineticAnalyzer:
         makes kcat (s⁻¹) and kcat/Km (s⁻¹·M⁻¹) physically meaningful for
         comparison with literature values.
 
-        When peak_ids is None, all peaks are recalibrated and self.results is
-        replaced entirely. When peak_ids is provided, only those peaks are
-        recalibrated and self.results is updated in-place for those keys only;
-        all other peaks retain their existing results. Model selection respects
-        self.special_peaks via _select_and_fit in both modes.
+        When peak_ids is None, every peak currently in self.results is
+        recalibrated and self.results is replaced entirely, so peaks whose
+        calibrated re-fit fails are dropped. When peak_ids is provided, only those
+        peaks are recalibrated and self.results is updated in-place for those keys
+        only; all other peaks retain their existing results. Model selection
+        respects self.special_peaks via _select_and_fit in both modes. The
+        Lineweaver-Burk cross-validation fit is re-fitted on the calibrated
+        velocities, and cal is recorded in self.calibrations for each peak.
 
         Two propagation modes are available. The precise mode (default) applies
-        the full delta-method per data point, propagating both slope and intercept
-        uncertainty from the calibration curve. The simplified mode divides v_std
-        by the calibration slope only, which is appropriate when calibration
-        parameter uncertainty is negligible relative to replicate variance.
+        the full delta-method per data point, propagating slope and intercept
+        uncertainty and their covariance from the calibration curve. The
+        simplified mode divides v_std by the calibration slope only, which is
+        appropriate when calibration parameter uncertainty is negligible relative
+        to replicate variance.
 
         Rebuilds self.results from self.df on every call, making repeated calls safe
         when the calibration is updated between calls.
@@ -223,7 +227,8 @@ class KineticAnalyzer:
                 been fitted before passing; area_to_conc and area_to_conc_with_error
                 are called on each peak's mean signal array.
             precise_std: If True, applies full delta-method propagation including
-                slope and intercept uncertainty from the calibration curve (recommended).
+                slope, intercept, and slope–intercept covariance from the calibration
+                curve (recommended).
                 If False, uses the simplified approximation v_std / slope. Defaults
                 to True.
             peak_ids: Optional list of peak_ids to recalibrate. If provided, only

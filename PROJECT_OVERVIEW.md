@@ -2,13 +2,37 @@
 
 ## Purpose
 
-Computes Michaelis-Menten enzyme kinetics from pre-aggregated HPLC peak area data.
-Two CLI entry points are provided: `analyze` (main kinetic pipeline) and `main.py`
-(per-peak linear calibration curve fitting).
+Computes Michaelis-Menten enzyme kinetics (Km, Vmax, kcat, kcat/Km) from pre-aggregated HPLC
+peak-area data produced by PeakAnalyzer, with optional per-peak linear calibration so velocities
+and derived constants carry physical units.
 
-The typical workflow is:
-1. Run `main.py` on CoA standard data to produce a `Calibration` per peak.
-2. Run `analyze` on assay data, optionally supplying the calibration file from step 1.
+The package has two pipelines, both reachable from one CLI:
+
+| Pipeline    | Runner                                             | Purpose |
+|-------------|----------------------------------------------------|---------|
+| `analyze`   | `cli/analyze.py::run_enzyme_kinetic_analysis_pipeline` | Fit kinetic models per peak, optionally calibrate, export CSV and plots |
+| `calibrate` | `cli/calibration.py::run_calibration_pipeline`     | Fit and report a linear calibration curve per peak |
+
+Entry points (`pyproject.toml` `[project.scripts]`):
+
+| Script      | Target                               | Error handling |
+|-------------|--------------------------------------|----------------|
+| `pipeline`  | `enzyme_kinetics.cli.main:main`      | Subcommands `analyze` / `calibrate`; catches errors and returns exit codes 0/1/2/130 |
+| `analyze`   | `enzyme_kinetics.cli.analyze:main`   | Exceptions propagate |
+| `calibrate` | `enzyme_kinetics.cli.calibration:main` | Exceptions propagate |
+
+`python -m enzyme_kinetics` is equivalent to `pipeline`. All three call
+`cli.main.configure_logging`, which re-enables the `enzyme_kinetics` logger (the package disables
+it on import in `__init__.py`) and adds a console sink plus a rotating DEBUG file sink at
+`./logs/enzyme_kinetics.log`.
+
+Typical workflow:
+
+1. `pipeline calibrate standards.csv out/cal.txt` to inspect calibration quality per peak.
+2. `pipeline analyze assay.csv out/ --calibration-path standards.csv`. The standards CSV is
+   refitted inside `analyze`; the saved report or JSON from step 1 is not consumed by the CLI.
+
+User-facing usage, options and output formats are documented in `README.md`.
 
 ---
 
@@ -16,210 +40,319 @@ The typical workflow is:
 
 ```
 src/enzyme_kinetics/
-├── main.py          — `analyze` CLI; KineticArgs Pydantic model
-├── calibrate.py     — `calibrate` CLI; CalibrationArgs Pydantic model
-└── core/
-    ├── io.py        — CSV loading, column sanitization
-    ├── preprocess.py — velocity computation from area/time, per-peak extraction
-    ├── compounds.py  — Compounds enum, peak ID canonicalization, categorical ordering
-    ├── models.py     — kinetic model functions + curve_fit wrappers, FitResult
-    ├── calibration.py — linear calibration fit, Calibration dataclass, plot/save/load
-    ├── derive.py     — kcat / kcat/Km computation, KineticConstants dataclass
-    ├── analyze.py    — KineticAnalyzer orchestrator, analyze_peaks batch helper
-    └── plots.py      — KineticPlots: MM curves, LB plots, residuals, efficiency bar chart
+├── __init__.py            logger.disable("enzyme_kinetics")
+├── __main__.py            python -m entry point → cli.main.main
+├── cli/
+│   ├── main.py            tyro subcommand union (KineticArgs | CalibrationArgs), configure_logging,
+│   │                      exit-code mapping
+│   ├── analyze.py         run_enzyme_kinetic_analysis_pipeline; apply_calibration (fits a
+│   │                      Calibration per standards peak and applies it to the analyzer)
+│   └── calibration.py     run_calibration_pipeline (fit → save report/JSON → diagnostic plot)
+├── analysis/
+│   ├── arguments.py       KineticArgs (Pydantic, frozen); reaction_time_seconds computed field
+│   ├── analyze.py         _select_and_fit, KineticAnalyzer, analyze_peaks (batch helper)
+│   └── plots.py           KineticPlots: fit curves, Lineweaver-Burk, residuals, efficiency bars
+├── calibration/
+│   ├── __init__.py        re-exports Calibration, CalibrationArgs, fit/plot/save_calibration
+│   ├── arguments.py       CalibrationArgs (Pydantic, frozen)
+│   └── calibrate.py       Calibration dataclass, fit_calibration, save/load_calibration,
+│                          plot_calibration
+├── core/
+│   ├── models.py          model equations, effective_sigma, fit_model + per-model wrappers,
+│   │                      FitResult, r_squared
+│   ├── derive.py          derive_constants, KineticConstants, covariance-aware kcat/Km
+│   ├── preprocess.py      column-name constants, extract_peak_data, prepare_velocity
+│   └── compounds.py       Compounds enum, aliases, canonicalize_peak_ids, prefix handling
+└── forks/                 general-purpose utilities vendored from other projects
+    ├── __init__.py        re-exports PathBuilder, to_snake_case, CleaningOptions, read_clean_csv
+    ├── builder.py         PathBuilder: immutable, tagged, versioned, collision-safe output paths
+    ├── case.py            to_snake_case, to_slug, asciify
+    └── clean.py           read_clean_csv, index-artifact removal, unique snake_case columns
 ```
+
+Outside `src/`: `excluded/fitting.py` holds the former `core/calibration.py`. It is not packaged
+or imported.
+
+### Import dependencies
+
+```
+cli ──► analysis ──► calibration ──► core.models
+ │         │
+ │         ├──► core.derive ──► core.models
+ │         ├──► core.preprocess
+ │         └──► forks (PathBuilder)
+ ├──► core.compounds
+ └──► forks (read_clean_csv)
+```
+
+`core` has no dependency on `analysis`, `calibration`, `cli` or `forks`. `cli.analyze` and
+`cli.calibration` import `configure_logging` from `cli.main`. `cli.main` imports only the two
+argument models at module level and imports the runners lazily inside `main()`.
 
 ---
 
 ## Data Flow
 
-```
-CSV (PeakAnalyzer output)
-  └─ load_plottable_data()          # io.py  — loads, sanitizes columns to snake_case
-       └─ canonicalize_peak_ids()   # compounds.py  — resolves peak IDs to Compounds enum,
-            |                         produces ordered pandas.Categorical
-            └─ KineticAnalyzer.fit()
-                 └─ extract_peak_data()      # preprocess.py
-                      └─ prepare_velocity()  # area / rxn_time → v (area/s)
-                 └─ _select_and_fit()        # models.py  — MM or Hill fit → FitResult
-                 └─ fit_lineweaver_burk()    # models.py  — cross-validation fit
-                 └─ derive_constants()       # derive.py  — kcat, kcat/Km → KineticConstants
+### `analyze`
 
-  [optional] KineticAnalyzer.apply_calibration(Calibration)
-                 └─ area_to_conc()           # calibration.py  — area → µM
-                 └─ v = µM / rxn_time        # velocity now µM/s
-                 └─ re-fit → KineticConstants with physical units
-
-  └─ KineticAnalyzer.export_csv()   # KineticConstants.to_dict() → DataFrame → CSV
-  └─ KineticAnalyzer.plot()         # plots.py  — saves PNG figures
 ```
+assay CSV (PeakAnalyzer output)
+  └─ read_clean_csv(drop_indexlike=True, snake_case=True)   forks/clean.py
+       └─ required-column check: substrate_conc, peak_id, mean, std, count   cli/analyze.py
+            └─ canonicalize_peak_ids(prefixes=args.peak_prefixes)          core/compounds.py
+                 → peak_id becomes an ordered pandas.Categorical
+                 └─ sort by peak_id, substrate_conc
+                      └─ KineticAnalyzer(enzyme_conc_um, reaction_time_seconds, substrate, df)
+                           │
+                           ├─ fit()                              raw pass, area/s
+                           │    for each peak_id:
+                           │      extract_peak_data → prepare_velocity   v = mean / t, v_std = std / t
+                           │      _select_and_fit → fit_michaelis_menten | fit_hill   (sigma = v_std)
+                           │      fit_lineweaver_burk(s, v)             failure → warning, lb_fit=None
+                           │      derive_constants → KineticConstants
+                           │    primary-fit failure → warning, peak omitted from results
+                           │
+                           ├─ [--calibration-path] cli.analyze.apply_calibration
+                           │    read + clean + canonicalize standards CSV
+                           │    for each standards peak_id present in analyzer.results:
+                           │      fit_calibration(substrate_conc, mean, sigma=std)
+                           │      KineticAnalyzer.apply_calibration(cal, peak_ids=[peak_id])
+                           │        is_valid() false → warning only
+                           │        v_um     = area_to_conc(mean) / t
+                           │        v_std_um = area_to_conc_with_error(mean, std)[1] / t
+                           │        refit primary model and LB on (s, v_um)
+                           │        derive_constants → replaces results[peak_id]
+                           │    standards peaks with no raw fit → warning, skipped
+                           │
+                           ├─ export_csv(target_dir / input.name)
+                           │    KineticConstants.to_dict() rows → <stem>_kinetics.csv
+                           │    (PathBuilder.reserve(): atomic, versioned unless --overwrite)
+                           │
+                           └─ plot(target_dir / input.name, is_calibrated)
+                                KineticPlots.plot → plot_lineweaver_burk → plot_residuals
+                                  → plot_efficiency_comparison(exclude={"OLV"})
+                                  PNGs: <stem>_kinetics / _lineweaver_burk / _residuals / _efficiency
+```
+
+`is_calibrated` passed to `plot()` is `True` when `--calibration-path` is given or when
+`--is-calibrated` is set. It changes only labels and whether plotted points are converted; no
+calculation depends on it.
+
+### `calibrate`
+
+```
+standards CSV
+  └─ read_clean_csv → required-column check → canonicalize_peak_ids → sort
+       └─ for each peak_id:
+            fit_calibration(substrate_conc, mean, sigma=std)
+            save_calibration(nice=args.pretty)
+              → <outfile_stem>_<peak_id>.txt   (pretty text report)
+              → <outfile_stem>_<peak_id>.json  (--no-pretty; loadable by load_calibration)
+            plot_calibration → <outfile_stem>_<peak_id>.png  (fit, residuals, standardized residuals)
+```
+
+Output paths are built with `Path.with_name`, not `PathBuilder`, so they are always overwritten.
+`CalibrationArgs.overwrite` is accepted but unused.
 
 ---
 
-## Units of Measure — Comprehensive Reference
+## Units of Measure
 
-### Input / DataFrame columns
+### Input columns
 
 | Column | Unit | Notes |
 |---|---|---|
-| `substrate_conc` | µM | **Critical**: must be µM throughout; no runtime check performed |
-| `mean` | area (dimensionless HPLC counts) | Integrated peak area; instrument-specific |
-| `std` | area | Standard deviation of peak area across replicates |
-| `count` | integer (replicates) | Number of replicates per group |
+| `substrate_conc` | µM | Must be µM throughout; no runtime check. In `calibrate` this is the known standard concentration |
+| `mean` | area | Integrated peak area (instrument counts) |
+| `std` | area | Replicate standard deviation; used directly as fit sigma |
+| `count` | replicates | Required by the column check and passed to `prepare_velocity`, but not used in any calculation |
+
+### Time and enzyme
+
+| Variable | Unit |
+|---|---|
+| `KineticArgs.rxn_time` (CLI `--rxn-time`) | minutes |
+| `KineticArgs.reaction_time_seconds`, `KineticAnalyzer.reaction_time_seconds`, `rxn_time` args in `core.preprocess` | seconds |
+| `enzyme_conc_um` | µM |
 
 ### Calibration (`Calibration` dataclass)
 
 | Field | Unit | Notes |
 |---|---|---|
-| `slope` | area / µM | Calibration sensitivity |
-| `slope_std` | area / µM | Uncertainty on slope |
-| `intercept` | area | y-intercept at [CoA] = 0 |
-| `intercept_std` | area | Uncertainty on intercept |
-| `r_squared` | dimensionless | ≥ 0.999 expected for HPLC CoA |
-| `rmse` | area | Root mean square error of the fit |
-| `conc_range` | µM, µM | (min, max) of calibration standards |
+| `slope`, `slope_std` | area/µM | |
+| `intercept`, `intercept_std` | area | |
+| `slope_intercept_cov` | area²/µM | Defaults to 0.0 when loaded from JSON saved without it |
+| `r_squared` | — | `is_valid()` requires ≥ 0.999 and slope > 0 |
+| `rmse` | area | |
+| `n_points` | count | Valid standards used |
+| `conc_range` | µM | (min, max) of standards |
 
-### Velocity
+### Velocity and fit parameters
 
-| Variable | Before calibration | After `apply_calibration()` |
+| Quantity | Uncalibrated | Calibrated |
 |---|---|---|
-| `v` (velocity) | area/s | µM/s |
-| `v_std` | area/s | µM/s |
-| `vmax` (`FitResult.vmax`) | area/s | µM/s |
-
-### Kinetic model parameters (`FitResult`)
-
-| Parameter | Unit | Notes |
-|---|---|---|
-| `km` / `k_half` | µM | Michaelis constant or Hill half-saturation constant |
-| `km_std` / `k_half_std` | µM | |
-| `ki` | µM | Substrate inhibition constant (SI model only) |
-| `ki_std` | µM | |
-| `hill_n` | dimensionless | Hill cooperativity coefficient |
-| `r_squared` | dimensionless | Coefficient of determination |
-| `pcov` | (vmax units)² / µM² | Full covariance matrix; used for delta-method error propagation |
+| `v`, `v_std` | area/s | µM/s |
+| `FitResult.vmax`, `vmax_std` | area/s | µM/s |
+| `FitResult.km` / `k_half`, `ki`, S0 | µM | µM |
+| `FitResult.hill_n` | — | — |
+| `FitResult.pcov` | mixed: each entry is the product of its two parameters' units | |
+| LB `s_inv` | µM⁻¹ | µM⁻¹ |
+| LB `v_inv` | s/area | s/µM |
 
 ### Derived constants (`KineticConstants`)
 
-| Field | Unit | Notes |
+| Field | Calibrated unit | Uncalibrated unit |
 |---|---|---|
-| `kcat` | s⁻¹ (post-calibration) | Non-physical before calibration (area · µM⁻¹ · s⁻¹) |
-| `kcat_std` | s⁻¹ (post-calibration) | |
-| `kcat_km_M` | s⁻¹ · M⁻¹ | Km is converted µM → M (×1e-6) before computing ratio |
-| `kcat_km_std_M` | s⁻¹ · M⁻¹ | Propagated via full Vmax–Km covariance matrix |
-| `ki` | µM | Forwarded from FitResult; None unless model is "si" |
-| `ki_std` | µM | |
-
-### Time
-
-| Variable | Unit |
-|---|---|
-| `rxn_time` (CLI arg) | minutes (converted to seconds via `reaction_time_seconds`) |
-| `reaction_time_seconds` / `rxn_time` (internal) | seconds |
-| `enzyme_conc_um` | µM |
-
-### Lineweaver-Burk reciprocal space
-
-| Variable | Unit |
-|---|---|
-| `s_inv` (1/[S]) | µM⁻¹ |
-| `v_inv` (1/V) | s/area (before cal) or µM⁻¹ · s (after cal) |
+| `kcat`, `kcat_std` | s⁻¹ | area·µM⁻¹·s⁻¹ (non-physical) |
+| `kcat_km_M`, `kcat_km_std_M` | s⁻¹·M⁻¹ | area·µM⁻¹·s⁻¹·M⁻¹ (non-physical) |
+| `ki`, `ki_std` | µM | µM (substrate-inhibition fits only, else `None`) |
 
 ---
 
 ## Key Design Decisions
 
-### Two-phase velocity: area/s → µM/s
+### Raw-then-calibrated fitting
 
-Before calibration, all velocities are in **area/s** (dimensionless HPLC counts per
-second). `apply_calibration()` converts using:
+`fit()` always runs first on area/s velocities; `apply_calibration()` rebuilds results for the
+selected peaks from the original `mean` areas. `extract_peak_data` / `prepare_velocity` return raw
+`mean_signal` as a fourth element so calibration is applied to area directly rather than to
+velocity × time. With `peak_ids=None` the results dict is replaced wholesale, so peaks whose
+calibrated refit fails disappear. With `peak_ids=[...]` (the CLI path) results are updated in
+place, and IDs not already in `results` raise `ValueError`. Each applied `Calibration` is stored
+in `KineticAnalyzer.calibrations[peak_id]` so plots can convert observed points to the same units.
 
-```
-v_µM_per_s = Calibration.area_to_conc(mean_area) / reaction_time_seconds
-```
+### Weighting and sigma sanitization
 
-This avoids a lossy area ↔ velocity round-trip; raw `mean_signal` (area) is explicitly
-returned as the fourth element from `extract_peak_data()` / `prepare_velocity()`.
-
-### kcat/Km unit conversion
-
-`_kcat_km_with_covariance()` in `derive.py` converts Km from µM to M (×1e-6) before
-computing the ratio, so that `kcat_km_M` is always in the standard literature unit of
-s⁻¹ · M⁻¹ — even though all internal concentration math uses µM. The partial
-derivatives are scaled by the same factor.
+`core.models.effective_sigma` is shared by `fit_model` and `fit_calibration`. Zero or non-finite
+sigma entries are floored at the smallest positive finite sigma; if none exists, sigma is `None`.
+`absolute_sigma` is `True` only when a sigma array is actually used. Unweighted fits therefore
+get their covariance scaled by the residual variance instead of assuming unit errors.
+`fit_calibration` additionally drops rows whose concentration, area or sigma is non-finite before
+fitting, and it requires at least two points.
 
 ### Covariance-aware error propagation
 
-`pcov` (the full parameter covariance matrix from `scipy.optimize.curve_fit`) is stored
-on every `FitResult`. Vmax and Km are anti-correlated in MM fitting; summing variances
-separately underestimates the true uncertainty in kcat/Km. The delta method with the
-off-diagonal covariance term is applied in `_kcat_km_with_covariance`.
+- **kcat/Km** (`derive._kcat_km_with_covariance`): first-order delta method using `pcov[0,0]`,
+  `pcov[1,1]` and `pcov[0,1]`. Km is converted µM→M (×1e-6) so the result is in s⁻¹·M⁻¹, with the
+  partial derivatives scaled to match. Returns `(nan, nan)` when Km ≤ 0, Vmax ≤ 0 or the
+  covariance is non-finite, as with LB fits.
+- **kcat**: `vmax / [E]` and `vmax_std / [E]`; enzyme concentration is treated as exact.
+- **Area → concentration** (`Calibration.area_to_conc_with_error`): delta method over area std,
+  slope std, intercept std and the slope–intercept covariance, clamped at zero variance.
+- **Calibrated velocity std** in `apply_calibration`: the precise delta method by default;
+  `precise_std=False` uses `v_std / slope`.
+- **Plot error bars** (`KineticPlots._observed`) always use the simple `v_std / slope`, so after
+  calibration they can differ slightly from the sigmas used in the fit.
 
-### Calibration validity guard
+### Lineweaver-Burk as a cross-check only
 
-`Calibration.is_valid(r2_threshold=0.999)` checks `slope > 0` and `R² ≥ threshold`.
-`apply_calibration()` logs a warning if the calibration fails but proceeds; the caller
-must inspect kcat/Km quality after a failed-validity calibration.
+`fit_lineweaver_burk` is an OLS regression of 1/v on 1/[S] over positive points
+(`scipy.stats.linregress`). It back-calculates Vmax = 1/intercept and Km = slope·Vmax, and stores
+slope, intercept and std_err in `extra`. Its `perr` and `pcov` are NaN by design. It never feeds
+kcat or kcat/Km; it only supplies the `km_lb`, `vmax_lb` and `r_squared_lb` columns and the LB
+plot. After calibration it is refitted on µM/s velocities so its units match the primary fit.
 
-### Compounds enum and categorical ordering
+### Model tagging and parameter access
 
-`Compounds` (a `StrEnum`) is the authoritative identity for each tracked analyte
-(HTAL, PDAL, OA, OLV). `canonicalize_peak_ids()` resolves raw HPLC string labels to
-`Compounds` values and produces an **ordered** `pandas.Categorical` so that downstream
-grouping and plotting respect the defined compound order. Chain-length prefixes (C3–C7)
-are optionally interleaved.
+`FitResult` stores `popt` as a tuple, with index 0 = Vmax and index 1 = Km / k_half, so
+`derive_constants` works uniformly across models. Model-specific properties (`k_half`, `hill_n`,
+`ki` and their `_std` variants) raise `AttributeError` for the wrong `model_type`.
+`KineticConstants.to_dict()` names the second parameter `k_half` for Hill fits and `km`
+otherwise, and emits `hill_n` / `ki` columns only for the relevant models.
+
+### Peak identity and ordering
+
+`Compounds` (`StrEnum`: HTAL, PDAL, OA, OLV) is the canonical identity. Aliases are normalized by
+`canonicalize_label`, which uppercases and joins non-alphanumeric runs with `_`, and are checked
+for collisions at import time. `canonicalize_peak_ids`:
+
+- uppercases raw IDs;
+- strips optional chain-length prefixes, matching them case-insensitively;
+- resolves the remainder with `Compounds.resolve`, raising `ValueError` on unknown labels;
+- reattaches the prefix;
+- stores the column as an ordered `Categorical` in which each base compound is followed by its
+  prefixed variants.
+
+Prefix handling is off when `peak_prefixes` is `None`. When the CLI supplies any value,
+`coerce_peak_prefixes` merges it with the built-in `C3`–`C7`.
+
+### Output path safety
+
+`forks.builder.PathBuilder` is a frozen dataclass whose `with_*` methods return new instances. It
+sanitizes tags and stems, truncates filenames by byte count with a fixed reserve for the version
+suffix, avoids Windows reserved device names, and versions on collision (`_v2`, `_v3`, … up to
+`_v999`). `reserve()` claims a name atomically with an exclusive create; `export_csv` uses it.
+`KineticPlots` passes the builder straight to `savefig` through `__fspath__`, which resolves
+without reserving, and builds with `create=True`.
+
+### Column cleaning
+
+`forks.clean.read_clean_csv` drops index artifacts (`index`, `idx`, `Unnamed: N`) before
+relabelling, because snake_casing would rewrite the colon that pattern relies on. It then converts
+labels with `to_snake_case`, which splits camelCase and acronyms and transliterates to ASCII,
+and resolves duplicate labels with numeric suffixes instead of dropping columns.
 
 ---
 
-## Docstring Style
+## Kinetic Models
 
-**Convention**: Google style (`ruff.lint.pydocstyle.convention = "google"`), enforced
-by ruff `D` rules.
+| `model_type` | Equation function | Fit wrapper | Parameters (`popt` order) | Initial guess | Used by `KineticAnalyzer` |
+|---|---|---|---|---|---|
+| `"mm"` | `michaelis_menten` | `fit_michaelis_menten` | Vmax, Km | max(v), median(s) | Default for every peak |
+| `"hill"` | `hill_equation` | `fit_hill` | Vmax, k_half, n | max(v), median(s), 2.0 | `special_peaks={id: "hill"}` (Python API only) |
+| `"tmm"` | `threshold_michaelis_menten` | `fit_threshold_michaelis_menten` | Vmax, Km, S0 | 2·max(v), median(s), 0.5 | No (dispatch commented out) |
+| `"si"` | `substrate_inhibition` | `fit_substrate_inhibition` | Vmax, Km, Ki | max(v), median(s), max(s) | No |
+| `"lb"` | `michaelis_menten` (for `predict`) | `fit_lineweaver_burk` | Vmax, Km (back-calculated) | — (linear) | Always, as cross-check |
 
-**Level of detail applied**: Comprehensive. All public functions and classes carry:
-
-- A one-line summary sentence.
-- An extended description when the function has non-obvious behavior (e.g. unit
-  transformations, numeric edge cases, covariance propagation, dead-zone thresholds,
-  anti-correlation effects, calibration validity semantics).
-- `Args:` section with per-parameter descriptions that **always include units** for
-  every physically meaningful quantity (µM, s, area, area/µM, s⁻¹, s⁻¹·M⁻¹).
-- `Returns:` section specifying units of returned quantities.
-- `Raises:` section for `ValueError` / `RuntimeError` paths.
-- `Note:` sections for unit-consistency warnings (e.g. "substrate_conc must be in µM;
-  passing other units will silently produce incorrect results").
-- `Attributes:` sections on all dataclasses and Pydantic models, each attribute
-  annotated with units where applicable.
-- Module-level docstrings include a `Typical usage:` code snippet.
-
-**Private helpers** (`_func`) have minimal docstrings — one summary line is sufficient
-unless the logic is non-obvious.
-
-**No narrative comments** describing what the code does; inline comments are used only
-for the WHY (e.g. `# clamp numerical negatives`, `# FIX 2: intercept term`).
-
----
+Non-linear fits go through `fit_model`: `curve_fit` with bounds `(0, inf)` on every parameter and
+`maxfev=10_000`. The CLI passes `special_peaks=None`, so it fits Michaelis-Menten everywhere.
+`analyze_peaks` is a standalone batch helper: it runs Michaelis-Menten plus LB fits on
+pre-extracted arrays, skips peaks with fewer than 3 points, and does not calibrate.
 
 ## Analytes Tracked
 
-| Enum member | Full name |
-|---|---|
-| `HTAL` | Hexanoyl triacetic acid lactone |
-| `PDAL` | Pentyl diacetic acid lactone |
-| `OA` | Olivetolic acid |
-| `OLV` | Olivetol |
+| Enum member | Full name | Accepted aliases |
+|---|---|---|
+| `HTAL` | Hexanoyl triacetic acid lactone | hexanoyl triacetic acid, hexanoyl-triacetic acid |
+| `PDAL` | Pentyl diacetic acid lactone | pentyl diacetic acid, pentyl-diacetic acid |
+| `OA` | Olivetolic acid | olivetolic acid, ola |
+| `OLV` | Olivetol | olivetol, olivetolate |
+
+`plots._LABEL_MAP` gives display names for `OA` and `OLV` only.
 
 ---
 
-## Kinetic Models Available
+## Known Gaps and Inconsistencies
 
-| Tag | Function | Parameters |
-|---|---|---|
-| `"mm"` | `michaelis_menten` | Vmax, Km |
-| `"hill"` | `hill_equation` | Vmax, k_half, n |
-| `"tmm"` | `threshold_michaelis_menten` | Vmax, Km, S0 |
-| `"si"` | `substrate_inhibition` | Vmax, Km, Ki |
-| `"lb"` | `fit_lineweaver_burk` (linear) | Vmax, Km (back-calc) |
+Observed in the current code; not yet addressed.
 
-Default model for all peaks is `"mm"`. Pass `special_peaks={"peak_id": "hill"}` to
-`KineticAnalyzer` to override per-peak.
+- **Std vs SEM:** `std` is used as the absolute fit sigma for points that are replicate means, and
+  `count` is unused, so parameter uncertainties may be inflated by √n.
+- **Hard-coded choices:** the efficiency plot always excludes `OLV`, and Hill selection cannot be
+  set from the CLI.
+- **Unused options:** `CalibrationArgs.overwrite`.
+- **Unwired models:** the threshold Michaelis-Menten and substrate-inhibition fits exist but
+  `_select_and_fit` never dispatches to them.
+- **Repo hygiene:** `logs/` is not in `.gitignore`.
+- **Tests:** there is no test suite (`pytest` is in the `test` dependency group).
+
+---
+
+## Tooling and Conventions
+
+- **Python:** ≥ 3.14 (`.python-version` = 3.14). Code uses PEP 695 generics (`def f[T: ...]`,
+  `type X = ...`) and `typing.Self`.
+- **Build:** `uv_build`; dependencies are managed with uv (`uv.lock`).
+- **Lint and format:** ruff with line length 99 and Google pydocstyle convention. The extended rule
+  sets are A, B, C4, COM, D, E, EM, F, FA, FURB, SIM, UP and W.
+- **Type checking:** `ty`, with `pandas-stubs` and `scipy-stubs`.
+- **Pre-commit:** `uv-sync`, `ruff-check --fix`, `ruff-format`.
+- **Docstrings:** Google style throughout.
+  - Public functions and classes have `Args`, `Returns` and `Raises` sections, dataclasses and
+    Pydantic models have `Attributes`, and physical quantities state their units.
+  - Most modules include a `Typical usage:` example.
+  - Private helpers usually have a one-line summary.
+- **Comments:** runners use numbered step comments (`# 1. Load data`, …). Some fixes are tagged
+  inline (`# FIX 1`, `# FIX 2`, `# FIX 4`, `# FIX 7`), referring to an earlier refactor.
+- **Logging:** loguru with `{}`-style placeholders, disabled at package import and enabled by the
+  CLI.

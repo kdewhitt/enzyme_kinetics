@@ -8,7 +8,8 @@ including intercept uncertainty.
 
 Assumes a linear detector response (Beer-Lambert regime) across the working
 concentration range. For typical CoA/HPLC calibrations R² ≥ 0.999 is expected;
-the is_valid() guard enforces this threshold before results are used downstream.
+is_valid() checks this threshold, and KineticAnalyzer.apply_calibration logs a
+warning (but still proceeds) when a calibration fails it.
 
 Typical usage:
     import numpy as np
@@ -175,10 +176,11 @@ def fit_calibration(
 
     Fits the model peak_area = slope × [CoA] + intercept using
     scipy.optimize.curve_fit. When sigma is provided and contains at least one
-    non-zero finite value, weighted least squares is used with absolute_sigma=True
-    so that supplied uncertainties are treated as absolute measurement errors.
-    When sigma is absent or all-zero, OLS is used (absolute_sigma defaults to
-    False inside curve_fit).
+    positive value, weighted least squares is used with absolute_sigma=True so
+    that supplied uncertainties are treated as absolute measurement errors; zero
+    entries (e.g. blanks) are floored at the smallest positive sigma via
+    effective_sigma. When sigma is absent or all-zero, OLS is used with
+    absolute_sigma=False.
 
     Args:
         concentrations: Known CoA concentrations of calibration standards in µM.
@@ -258,9 +260,9 @@ def save_calibration(cal: Calibration, peak_id: str, path: Path, nice: bool = Fa
 
     Two output modes are available. When nice is False (default), writes a
     compact JSON file containing slope, slope_std, intercept, intercept_std,
-    r_squared, rmse, n_points, and conc_range. When nice is True, writes a
-    formatted plain-text report including a peak-specific header, the fitted
-    model equation, all parameters with units, RMSE, n_points, the inverse
+    r_squared, rmse, n_points, conc_range, and slope_intercept_cov. When nice is
+    True, writes a formatted plain-text report including a peak-specific header,
+    the fitted model equation, all parameters with units, RMSE, n_points, the inverse
     function, and a Python code snippet for embedding the calibration constants.
 
     Args:

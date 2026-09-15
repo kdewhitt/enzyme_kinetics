@@ -69,7 +69,7 @@ def extract_peak_data(
     peak_id: str,
     rxn_time: float,
 ) -> tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray] | None:
-    """Extracts substrate concentrations, velocity, SEM, and raw area for a single peak.
+    """Extracts substrate concentrations, velocity, velocity std, and raw area for a single peak.
 
     Filters df to rows matching peak_id, drops rows with missing substrate
     concentration or mean signal, and returns None if the filtered subset is

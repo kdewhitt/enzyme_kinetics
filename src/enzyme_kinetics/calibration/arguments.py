@@ -41,8 +41,8 @@ class CalibrationArgs(BaseModel):
     Attributes:
         path: Path to the pre-aggregated PeakAnalyzer CSV file to process.
         outfile: Base output file path. A peak-specific suffix is appended
-            to the stem for each peak_id, producing one .txt report and one
-            .png diagnostic plot per peak.
+            to the stem for each peak_id, producing one report (.txt when
+            pretty, .json otherwise) and one .png diagnostic plot per peak.
         peak_prefixes: Optional FlexPeakPrefixes configuration controlling
             which peak ID prefixes are recognized during canonicalization.
             If None, default canonicalization rules apply. Defaults to None.

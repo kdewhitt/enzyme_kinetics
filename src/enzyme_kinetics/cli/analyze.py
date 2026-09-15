@@ -37,7 +37,11 @@ def apply_calibration(
     peak_prefixes: frozenset[str] | None,
     analyzer: KineticAnalyzer,
 ) -> KineticAnalyzer:
-    """Applies a fitted Calibration object to the KineticAnalyzer."""
+    """Fits a calibration per peak from a standards CSV and applies it to the KineticAnalyzer.
+
+    Standards peaks with no existing kinetic fit in analyzer.results are skipped
+    with a warning.
+    """
     # 1. Load data
     df = read_clean_csv(path, options=CleaningOptions(snake_case=True, drop_indexlike=True))
     required_cols = {"substrate_conc", "peak_id", "mean", "std", "count"}
@@ -74,11 +78,11 @@ def run_enzyme_kinetic_analysis_pipeline(args: KineticArgs) -> None:
     fits Michaelis-Menten models to each peak, and exports results as a
     tagged CSV and a set of kinetic plots. Steps are logged at INFO level.
 
-    kcat and kcat/Km values in the output carry non-physical units unless
-    a calibration curve is applied upstream. The calibration step is
-    currently disabled; enable analyzer.apply_calibration() with a fitted
-    Calibration object before calling analyzer.fit() to produce physically
-    meaningful s⁻¹ and s⁻¹·M⁻¹ values.
+    When args.calibration_path is set, a calibration curve is fitted per peak
+    from that standards CSV and applied after the raw fit, so kcat and kcat/Km
+    are reported in s⁻¹ and s⁻¹·M⁻¹. Without it (and without
+    args.is_calibrated), kcat and kcat/Km carry non-physical units and a
+    warning is logged.
 
     Args:
         args: Fully validated KineticArgs instance produced by tyro.cli.
