@@ -3,11 +3,11 @@
 ## Purpose
 
 Computes Michaelis-Menten enzyme kinetics from pre-aggregated HPLC peak area data.
-Two CLI entry points are provided: `analyze` (main kinetic pipeline) and `calibrate`
+Two CLI entry points are provided: `analyze` (main kinetic pipeline) and `main.py`
 (per-peak linear calibration curve fitting).
 
 The typical workflow is:
-1. Run `calibrate` on CoA standard data to produce a `Calibration` per peak.
+1. Run `main.py` on CoA standard data to produce a `Calibration` per peak.
 2. Run `analyze` on assay data, optionally supplying the calibration file from step 1.
 
 ---
