@@ -17,9 +17,6 @@ Requires Python ≥ 3.14. Install with [uv](https://docs.astral.sh/uv/):
 uv sync
 ```
 
-The two private dependencies (`kgdlibs`, `logurich`) are pulled directly from GitHub and
-require network access during installation.
-
 ## CLI Commands
 
 ### `analyze` — Kinetics pipeline
@@ -32,26 +29,27 @@ analyze <path> <target_dir> [options]
 
 **Positional arguments**
 
-| Argument | Description |
-|---|---|
-| `path` | Pre-aggregated PeakAnalyzer CSV (`_area_analysis.csv` or `_height_analysis.csv`) |
-| `target_dir` | Directory to write output files into |
+| Argument     | Description                                                                      |
+|--------------|----------------------------------------------------------------------------------|
+| `path`       | Pre-aggregated PeakAnalyzer CSV (`_area_analysis.csv` or `_height_analysis.csv`) |
+| `target_dir` | Directory to write output files into                                             |
 
 **Options**
 
-| Flag | Default | Description |
-|---|---|---|
-| `--calibration-path PATH` | `None` | Path to a calibration `.txt` file. Converts velocities to µM/s and makes kcat (s⁻¹) and kcat/Km (M⁻¹·s⁻¹) physically meaningful. |
-| `--enzyme-conc-um FLOAT` | `12.25` | Total enzyme concentration in µM (used to compute kcat = Vmax / [E]). |
-| `--rxn-time FLOAT` | `180.0` | Reaction duration in minutes. |
-| `--substrate STR` | `"HexCoA"` | Substrate name propagated to result labels. |
-| `--is-calibrated` | `False` | Pass if input mean areas have already had calibration applied. |
-| `--overwrite` | `False` | Overwrite existing output files instead of appending a unique suffix. |
-| `--verbose` | `False` | Enable verbose logging. |
+| Flag                      | Default    | Description                                                                                                                      |
+|---------------------------|------------|----------------------------------------------------------------------------------------------------------------------------------|
+| `--calibration-path PATH` | `None`     | Path to a calibration `.txt` file. Converts velocities to µM/s and makes kcat (s⁻¹) and kcat/Km (M⁻¹·s⁻¹) physically meaningful. |
+| `--enzyme-conc-um FLOAT`  | `12.25`    | Total enzyme concentration in µM (used to compute kcat = Vmax / [E]).                                                            |
+| `--rxn-time FLOAT`        | `180.0`    | Reaction duration in minutes.                                                                                                    |
+| `--substrate STR`         | `"HexCoA"` | Substrate name propagated to result labels.                                                                                      |
+| `--is-calibrated`         | `False`    | Pass if input mean areas have already had calibration applied.                                                                   |
+| `--overwrite`             | `False`    | Overwrite existing output files instead of appending a unique suffix.                                                            |
+| `--verbose`               | `False`    | Enable verbose logging.                                                                                                          |
 
 **Required CSV columns:** `substrate_conc` (µM), `peak_id`, `mean`, `std`, `count`
 
 **Outputs**
+
 - `<target_dir>/<input_stem>_kinetics.csv` — one row per peak with Km, Vmax, kcat, kcat/Km
 - Michaelis-Menten curve plots, Lineweaver-Burk plots, residual plots, efficiency comparison panel
 
@@ -68,19 +66,19 @@ calibrate <path> <outfile> [options]
 
 **Positional arguments**
 
-| Argument | Description |
-|---|---|
-| `path` | Pre-aggregated PeakAnalyzer CSV containing calibration standards |
-| `outfile` | Base output path; a `_{peak_id}` suffix is appended per peak |
+| Argument  | Description                                                      |
+|-----------|------------------------------------------------------------------|
+| `path`    | Pre-aggregated PeakAnalyzer CSV containing calibration standards |
+| `outfile` | Base output path; a `_{peak_id}` suffix is appended per peak     |
 
 **Options**
 
-| Flag | Default | Description |
-|---|---|---|
-| `--peak-prefixes ...` | `None` | Custom peak-ID prefix configuration for canonicalization. |
-| `--pretty / --no-pretty` | `True` | Write human-readable plain-text reports (vs. compact JSON). |
-| `--overwrite` | `False` | Overwrite existing output files. |
-| `--verbose` | `False` | Enable verbose logging. |
+| Flag                     | Default | Description                                                 |
+|--------------------------|---------|-------------------------------------------------------------|
+| `--peak-prefixes ...`    | `None`  | Custom peak-ID prefix configuration for canonicalization.   |
+| `--pretty / --no-pretty` | `True`  | Write human-readable plain-text reports (vs. compact JSON). |
+| `--overwrite`            | `False` | Overwrite existing output files.                            |
+| `--verbose`              | `False` | Enable verbose logging.                                     |
 
 In the calibration CSV, `substrate_conc` holds known CoA standard concentrations (µM) and `mean`
 holds measured peak areas — the inverse of their roles in `analyze`.
@@ -109,11 +107,11 @@ carry non-physical units — suitable for relative comparisons only.
 
 All concentration inputs must be in **µM**. Outputs assume µM input:
 
-| Parameter | Unit |
-|---|---|
-| Km | µM |
-| kcat | s⁻¹ |
-| kcat/Km | M⁻¹·s⁻¹ |
+| Parameter | Unit    |
+|-----------|---------|
+| Km        | µM      |
+| kcat      | s⁻¹     |
+| kcat/Km   | M⁻¹·s⁻¹ |
 
 Passing concentrations in any other unit will silently produce incorrect results.
 
