@@ -39,6 +39,7 @@ __all__ = [
     "hill_equation",
     "lineweaver_burk_transform",
     "michaelis_menten",
+    "effective_sigma",
     "r_squared",
     "substrate_inhibition",
     "threshold_michaelis_menten",
@@ -300,6 +301,30 @@ def r_squared(observed: np.ndarray, predicted: np.ndarray) -> float:
     return 1.0 - (ss_res / ss_tot)
 
 
+def effective_sigma(sigma: np.ndarray | None) -> np.ndarray | None:
+    """Returns a sigma array safe to pass to curve_fit, or None for unweighted fitting.
+
+    curve_fit weights each residual by 1/sigma, so a single zero or non-finite
+    entry (e.g. a blank or single-replicate point) makes every residual non-finite
+    and the fit fails or returns garbage. Such entries are floored at the smallest
+    positive finite sigma in the array so they still contribute without dominating.
+
+    Args:
+        sigma: Per-point standard errors, or None.
+
+    Returns:
+        A float array with every entry positive and finite, or None if sigma is
+        None or contains no positive finite value.
+    """
+    if sigma is None:
+        return None
+    sigma = np.asarray(sigma, dtype=float)
+    usable = np.isfinite(sigma) & (sigma > 0)
+    if not np.any(usable):
+        return None
+    return np.where(usable, sigma, sigma[usable].min())
+
+
 def fit_model(
     model_func: Callable[..., np.ndarray],
     s: np.ndarray,
@@ -325,7 +350,8 @@ def fit_model(
         v: Reaction velocity array (area/s before calibration; µM/s after).
         p0: Initial parameter guesses in the same order as model_func expects.
         sigma: Per-point standard errors on v in the same units as v. If None or
-            all-zero, unweighted (OLS) fitting is used. Defaults to None.
+            all-zero, unweighted (OLS) fitting is used. Zero or non-finite entries
+            are floored via effective_sigma. Defaults to None.
         bounds: Lower and upper bounds for parameters passed directly to curve_fit.
             Defaults to (0, np.inf).
         maxfev: Maximum number of function evaluations for the optimizer. Defaults
@@ -342,14 +368,14 @@ def fit_model(
         ValueError: If s and v have incompatible shapes or p0 has the wrong length
             for model_func.
     """
-    effective_sigma = sigma if sigma is not None and np.any(sigma > 0) else None
+    fit_sigma = effective_sigma(sigma)
     popt, pcov = curve_fit(
         model_func,
         s,
         v,
         p0=p0,
-        sigma=effective_sigma,
-        absolute_sigma=True,
+        sigma=fit_sigma,
+        absolute_sigma=fit_sigma is not None,
         bounds=bounds,
         maxfev=maxfev,
     )
@@ -448,7 +474,7 @@ def fit_threshold_michaelis_menten(
         v,
         [vmax_guess, km_guess, 0.5],
         sigma=sigma,
-        model_type="mm",
+        model_type="tmm",
     )
 
 

@@ -99,7 +99,7 @@ def canonicalize_label(value: object) -> str:
         >>> canonicalize_label("olivetolic acid")
         'OLIVETOLIC_ACID'
         >>> canonicalize_label("  OLA  ")
-        'OA'
+        'OLA'
         >>> canonicalize_label("hexanoyl-triacetic acid")
         'HEXANOYL_TRIACETIC_ACID'
     """
@@ -316,7 +316,7 @@ def _canonicalize_prefixes(prefixes: str | Iterable[str] | None) -> list[str]:
         A list of normalized prefix strings, each ending with a single hyphen.
         Returns an empty list if prefixes is None or empty.
     """
-    return [f"{p.strip().strip('-')}-" for p in _coerce_to_list(prefixes)]
+    return [f"{p.strip().strip('-').upper()}-" for p in _coerce_to_list(prefixes)]
 
 
 def _build_peak_category_order(
@@ -417,15 +417,16 @@ def canonicalize_peak_ids(
     prefix_list = _canonicalize_prefixes(prefixes)
     prefix_pattern = _compile_prefix_pattern(prefix_list)
 
-    raw = df[column].astype(str).str.strip()
+    # Uppercase before prefix matching so "c5-oa" is recognized like "C5-OA"
+    raw = df[column].astype(str).str.strip().str.upper()
 
     if prefix_pattern is None:
         extracted = ""
-        peaks = raw.str.upper()
+        peaks = raw
     else:
         pattern = prefix_pattern.pattern
         extracted = raw.str.extract(pattern, expand=False).fillna("")
-        peaks = raw.str.replace(pattern, "", regex=True).str.upper()
+        peaks = raw.str.replace(pattern, "", regex=True)
 
     unique_peaks = pd.unique(peaks.dropna())
     label_map = {peak: str(Compounds.resolve(peak)) for peak in unique_peaks}

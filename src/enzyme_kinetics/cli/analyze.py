@@ -12,6 +12,7 @@ from loguru import logger
 from enzyme_kinetics.analysis.analyze import KineticAnalyzer
 from enzyme_kinetics.analysis.arguments import KineticArgs
 from enzyme_kinetics.calibration.calibrate import fit_calibration
+from enzyme_kinetics.cli.main import configure_logging
 from enzyme_kinetics.core.compounds import canonicalize_peak_ids
 from enzyme_kinetics.forks import CleaningOptions, read_clean_csv
 
@@ -49,16 +50,19 @@ def apply_calibration(
 
     # 3. Sort data (defensive guard)
     df.sort_values(by=["peak_id", "substrate_conc"], inplace=True)
-    logger.info("Loaded %d peaks from %s", len(df), path)
+    logger.info("Loaded {} calibration rows from {}", len(df), path)
 
     for peak_id in df["peak_id"].unique():
         # if peak_id.lower() == "olv":
         #     continue
+        if peak_id not in analyzer.results:
+            logger.warning("Skipping calibration for {}: no kinetic fit to recalibrate", peak_id)
+            continue
         sub_df = df[df["peak_id"] == peak_id]
         # 4. Fit calibration model
         model = fit_calibration(sub_df["substrate_conc"], sub_df["mean"], sigma=sub_df["std"])
         analyzer.apply_calibration(model, peak_ids=[peak_id])
-        logger.info("Applied calibration to %s", peak_id)
+        logger.info("Applied calibration to {}", peak_id)
 
     return analyzer
 
@@ -100,7 +104,7 @@ def run_enzyme_kinetic_analysis_pipeline(args: KineticArgs) -> None:
 
     # 3. Sort data (defensive guard)
     df.sort_values(by=["peak_id", "substrate_conc"], inplace=True)
-    logger.info("Loaded %d peaks from {}", len(df), args.path)
+    logger.info("Loaded {} rows from {}", len(df), args.path)
 
     # 4. Initialize pipeline
     analyzer = KineticAnalyzer(
@@ -154,6 +158,7 @@ def main():
         description="Analyze enzyme kinetics data.",
         compact_help=True,
     )
+    configure_logging(console_level="DEBUG" if args.verbose else "INFO")
     run_enzyme_kinetic_analysis_pipeline(args)
 
 

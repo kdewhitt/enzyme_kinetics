@@ -40,7 +40,7 @@ def prepare_velocity(
     counts: np.ndarray,
     rxn_time: float,
 ) -> tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
-    """Computes reaction velocities and their SEMs from replicate summary statistics.
+    """Computes reaction velocities and their standard deviation from replicate summary statistics.
 
     Returns raw mean_signal as the fourth element so that callers can apply a
     calibration curve directly to area before converting to velocity, avoiding

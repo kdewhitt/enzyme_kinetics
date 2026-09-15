@@ -265,7 +265,7 @@ class KineticAnalyzer:
         )
         recalculated: dict[str, KineticConstants] = {}
 
-        for peak_id, kc in targets.items():
+        for peak_id in targets:
             data = extract_peak_data(self.df, peak_id, self.reaction_time_seconds)
             if data is None:
                 continue
@@ -306,12 +306,18 @@ class KineticAnalyzer:
                     v_std_um,
                     special_peaks=self.special_peaks,
                 )
+                # Re-fit LB on calibrated velocities so its Vmax/Km share units with mm_fit
+                lb_fit: FitResult | None = None
+                try:
+                    lb_fit = fit_lineweaver_burk(s, v_um)
+                except Exception:
+                    logger.warning("Calibrated LB fit failed for {}", peak_id)
                 recalculated[peak_id] = derive_constants(
                     self.substrate,
                     peak_id,
                     mm_fit,
                     self.enzyme_conc_um,
-                    lb_fit=kc.lb_fit,
+                    lb_fit=lb_fit,
                 )
             except Exception as exc:
                 logger.warning("Calibrated re-fit failed for {}: {}", peak_id, exc)

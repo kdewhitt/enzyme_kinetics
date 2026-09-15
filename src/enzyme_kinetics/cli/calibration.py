@@ -14,6 +14,7 @@ from enzyme_kinetics.calibration.calibrate import (
     plot_calibration,
     save_calibration,
 )
+from enzyme_kinetics.cli.main import configure_logging
 from enzyme_kinetics.core.compounds import canonicalize_peak_ids
 from enzyme_kinetics.forks import CleaningOptions, read_clean_csv
 
@@ -74,11 +75,13 @@ def run_calibration_pipeline(args: CalibrationArgs) -> None:
         # 4. Fit calibration model
         model = fit_calibration(sub_df["substrate_conc"], sub_df["mean"], sigma=sub_df["std"])
 
-        out_path = args.outfile / args.outfile.with_name(f"{args.outfile.stem}_{peak_id}.txt")
+        out_path = args.outfile.with_name(f"{args.outfile.stem}_{peak_id}.txt")
+        out_path.parent.mkdir(parents=True, exist_ok=True)
         # out_path = PathBuilder(args.outfile).with_tag(peak_id).path
 
-        # 7. Plot and save results
-        save_calibration(model, peak_id, out_path.with_suffix(".txt"), nice=args.pretty)
+        # 7. Plot and save results; JSON output is what load_calibration reads
+        report_suffix = ".txt" if args.pretty else ".json"
+        save_calibration(model, peak_id, out_path.with_suffix(report_suffix), nice=args.pretty)
         plot_calibration(
             model,
             sub_df["substrate_conc"],
@@ -101,6 +104,7 @@ def main():
         description="Fit calibration curves to enzyme kinetics data.",
         compact_help=True,
     )
+    configure_logging(console_level="DEBUG" if args.verbose else "INFO")
     run_calibration_pipeline(args)
 
 

@@ -31,7 +31,7 @@ import pandas as pd
 from loguru import logger
 from scipy.optimize import curve_fit
 
-from enzyme_kinetics.core.models import r_squared
+from enzyme_kinetics.core.models import effective_sigma, r_squared
 
 __all__ = [
     "Calibration",
@@ -60,6 +60,8 @@ class Calibration:
         n_points: Number of calibration standards used in the fit.
         conc_range: Minimum and maximum concentration of calibration
             standards in µM as a (min, max) tuple.
+        slope_intercept_cov: Covariance between slope and intercept in
+            area²/µM. Defaults to 0.0 for calibrations saved without it.
     """
 
     slope: float
@@ -70,6 +72,7 @@ class Calibration:
     rmse: float
     n_points: int
     conc_range: tuple[float, float]
+    slope_intercept_cov: float = 0.0
 
     def __str__(self) -> str:
         """Formats the calibration parameters as a compact summary string."""
@@ -130,9 +133,11 @@ class Calibration:
             σ_C² = (σ_area / slope)²
                  + ((area − intercept) · σ_slope / slope²)²
                  + (σ_intercept / slope)²
+                 + 2 · (area − intercept) · Cov(slope, intercept) / slope³
 
-        The intercept uncertainty term is small for well-behaved calibrations
-        where intercept ≈ 0, but is included for completeness.
+        Slope and intercept of a linear fit are strongly anti-correlated when
+        the standards sit at positive concentrations, so the covariance term is
+        required to avoid overstating the concentration uncertainty.
 
         Args:
             area: Measured peak area in area units.
@@ -145,13 +150,13 @@ class Calibration:
         dc_da = 1.0 / self.slope
         dc_ds = -(area - self.intercept) / (self.slope**2)
         dc_di = -1.0 / self.slope  # FIX 2: intercept term
-        conc_std = float(
-            np.sqrt(
-                (dc_da * area_std) ** 2
-                + (dc_ds * self.slope_std) ** 2
-                + (dc_di * self.intercept_std) ** 2,  # FIX 2
-            ),
+        conc_var = (
+            (dc_da * area_std) ** 2
+            + (dc_ds * self.slope_std) ** 2
+            + (dc_di * self.intercept_std) ** 2  # FIX 2
+            + 2.0 * dc_ds * dc_di * self.slope_intercept_cov
         )
+        conc_std = float(np.sqrt(max(conc_var, 0.0)))  # clamp numerical negatives
         return conc, conc_std
 
 
@@ -216,14 +221,15 @@ def fit_calibration(
     def _linear(x: np.ndarray, slope: float, intercept: float) -> np.ndarray:
         return slope * x + intercept
 
-    effective_sigma = sigma if sigma is not None and np.any(sigma > 0) else None
+    # Zero-std standards (e.g. blanks) would otherwise get infinite weight
+    fit_sigma = effective_sigma(sigma)
 
     popt, pcov = curve_fit(
         _linear,
         concentrations,
         peak_areas,
-        sigma=effective_sigma,
-        absolute_sigma=effective_sigma is not None,
+        sigma=fit_sigma,
+        absolute_sigma=fit_sigma is not None,
     )
 
     perr = np.sqrt(np.diag(pcov))
@@ -238,6 +244,7 @@ def fit_calibration(
         rmse=float(np.sqrt(np.mean((peak_areas - predicted) ** 2))),
         n_points=len(concentrations),
         conc_range=(float(concentrations.min()), float(concentrations.max())),
+        slope_intercept_cov=float(pcov[0, 1]),
     )
 
 
@@ -275,6 +282,7 @@ def save_calibration(cal: Calibration, peak_id: str, path: Path, nice: bool = Fa
             "rmse": cal.rmse,
             "n_points": cal.n_points,
             "conc_range": list(cal.conc_range),
+            "slope_intercept_cov": cal.slope_intercept_cov,
         }
         path.write_text(json.dumps(data, indent=2))
 
@@ -322,6 +330,7 @@ def load_calibration(path: Path) -> Calibration:
         rmse=data["rmse"],
         n_points=data["n_points"],
         conc_range=tuple(data["conc_range"]),
+        slope_intercept_cov=data.get("slope_intercept_cov", 0.0),
     )
 
 

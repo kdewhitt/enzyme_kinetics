@@ -70,7 +70,7 @@ class KineticPlots:
             are overwritten by PathBuilder.
         calibrated: Whether the velocities in results were produced after
             applying a calibration curve. Controls the velocity axis unit
-            label in plot(): "µM min⁻¹" when True, "area min⁻¹" when False.
+            label in plot(): "µM/s" when True, "area/s" when False.
     """
 
     def __init__(
@@ -98,9 +98,9 @@ class KineticPlots:
             overwrite: If True, existing files at resolved output paths are
                 overwritten. If False, PathBuilder appends a unique suffix to
                 avoid collisions. Defaults to False.
-            calibrated: If True, velocity axis labels use "µM min⁻¹" to
+            calibrated: If True, velocity axis labels use "µM/s" to
                 reflect that calibrated concentration velocities are plotted.
-                If False, labels use "area min⁻¹". Defaults to False.
+                If False, labels use "area/s". Defaults to False.
             calibrations: Optional mapping of peak_id to Calibration objects.
         """
         self.path = Path(path)
@@ -113,15 +113,41 @@ class KineticPlots:
 
     def _make_builder(self) -> PathBuilder:
         """Returns a PathBuilder seeded with the acquisition date and destination path."""
-        return PathBuilder.for_target(self.path, extension=".png", overwrite=self.overwrite)
+        return PathBuilder.for_target(
+            self.path,
+            extension=".png",
+            overwrite=self.overwrite,
+            create=True,
+        )
+
+    @property
+    def _velocity_unit(self) -> str:
+        """Velocity unit label matching the calibration state of the results."""
+        return "µM/s" if self.calibrated else "area/s"
+
+    def _observed(self, peak_id: str) -> tuple[np.ndarray, np.ndarray, np.ndarray] | None:
+        """Returns (s, v, v_std) for a peak in the same units the fit was made in.
+
+        When calibrated and a Calibration exists for the peak, raw area velocities
+        are converted to µM/s so observed points line up with the fitted curve.
+        """
+        data = extract_peak_data(self.df, peak_id, self.reaction_time_seconds)
+        if data is None:
+            return None
+        s, v, v_std, mean_signal = data
+        if self.calibrated and peak_id in self.calibrations:
+            cal = self.calibrations[peak_id]
+            v = np.asarray(cal.area_to_conc(mean_signal)) / self.reaction_time_seconds
+            v_std = v_std / cal.slope
+        return s, v, v_std
 
     def plot(self, *, show: bool = False, cols: int = 2) -> Self:
         """Plots MM (or Hill) fit curves for all peaks in a multi-panel grid.
 
         Each panel shows the raw data with error bars and the fitted curve,
         annotated with Vmax, Km (or k_half for Hill fits), and R². The velocity
-        axis label reflects the calibration state: "µM min⁻¹" when self.calibrated
-        is True (i.e. after apply_calibration() has been called), "area min⁻¹"
+        axis label reflects the calibration state: "µM/s" when self.calibrated
+        is True (i.e. after apply_calibration() has been called), "area/s"
         otherwise.
 
         The figure is saved to disk as a side effect with the tag "kinetics"
@@ -145,22 +171,15 @@ class KineticPlots:
 
         for i, peak_id in enumerate(peaks):
             ax = axes[i]
-            data = extract_peak_data(self.df, peak_id, self.reaction_time_seconds)
+            data = self._observed(peak_id)
             kc = self.results[peak_id]
 
             if data is None:
                 ax.set_visible(False)
                 continue
 
-            s, v, v_std, _ = data
+            s, v, v_std = data
             s_dense = np.linspace(0, s.max() * 1.05, 200)
-
-            # Apply calibration scaling to raw points if requested
-            if self.calibrated and peak_id in self.calibrations:
-                cal = self.calibrations[peak_id]
-                mean_signal = v * self.reaction_time_seconds
-                v = np.asarray(cal.area_to_conc(mean_signal)) / self.reaction_time_seconds
-                v_std = v_std / cal.slope
 
             # Raw data points with error bars
             ax.errorbar(
@@ -175,18 +194,25 @@ class KineticPlots:
 
             # Fitted model curve
             v_model = kc.fit.predict(s_dense)
-            ax.plot(s_dense, v_model, color="firebrick", lw=1.5, label=f"Fit ({kc.fit.model})")
+            ax.plot(
+                s_dense,
+                v_model,
+                color="firebrick",
+                lw=1.5,
+                label=f"Fit ({kc.fit.model_type})",
+            )
 
             # Annotation box: Km, Vmax, R²
-            unit_v = "µM/s" if self.calibrated else "area/s"
+            unit_v = self._velocity_unit
+            is_hill = kc.fit.model_type == "hill"
             ann_lines = [
-                f"Km = {kc.fit.km:.2f} ± {kc.fit.km_std:.2f} µM",
+                f"{'K½' if is_hill else 'Km'} = {kc.fit.km:.2f} ± {kc.fit.km_std:.2f} µM",
                 f"Vmax = {kc.fit.vmax:.4f} ± {kc.fit.vmax_std:.4f} {unit_v}",
                 f"R² = {kc.fit.r_squared:.4f}",
             ]
-            if kc.fit.ki is not None:
-                ann_lines.append(f"Ki = {kc.fit.ki:.2f} µM")
-            if kc.fit.hill_n is not None:
+            if kc.ki is not None:
+                ann_lines.append(f"Ki = {kc.ki:.2f} µM")
+            if is_hill:
                 ann_lines.append(f"n = {kc.fit.hill_n:.2f}")
 
             ax.text(
@@ -247,7 +273,7 @@ class KineticPlots:
 
         for i, peak_id in enumerate(lb_peaks):
             ax = axes[i]
-            data = extract_peak_data(self.df, peak_id, self.reaction_time_seconds)
+            data = self._observed(peak_id)
             kc = self.results[peak_id]
             lb = kc.lb_fit  # guaranteed not None
 
@@ -255,7 +281,7 @@ class KineticPlots:
                 ax.set_visible(False)
                 continue
 
-            s, v, _, _ = data
+            s, v, _ = data
             s_inv, v_inv = lineweaver_burk_transform(s, v)
 
             ax.scatter(
@@ -302,7 +328,7 @@ class KineticPlots:
 
             ax.set_title(_LABEL_MAP.get(peak_id, peak_id), fontweight="bold")
             ax.set_xlabel("1/[S] (µM⁻¹)")
-            ax.set_ylabel("1/V (µM⁻¹ min)")
+            ax.set_ylabel(f"1/V (1 / ({self._velocity_unit}))")
             ax.legend(fontsize=8)
 
         for j in range(len(lb_peaks), len(axes)):
@@ -345,19 +371,14 @@ class KineticPlots:
 
         for i, peak_id in enumerate(peaks):
             ax = axes[i]
-            data = extract_peak_data(self.df, peak_id, self.reaction_time_seconds)
+            data = self._observed(peak_id)
             kc = self.results[peak_id]
 
             if data is None:
                 ax.set_visible(False)
                 continue
 
-            s, v, v_std, _ = data
-            if self.calibrated and peak_id in self.calibrations:
-                cal = self.calibrations[peak_id]
-                mean_signal = v * self.reaction_time_seconds
-                v = np.asarray(cal.area_to_conc(mean_signal)) / self.reaction_time_seconds
-                v_std = v_std / cal.slope
+            s, v, v_std = data
             v_pred = kc.fit.predict(s)
             residuals = v - v_pred
 
@@ -466,9 +487,10 @@ class KineticPlots:
                 )
 
         _bar(ax_km, km_vals, km_errs, "Km", "Km (µM)")
-        _bar(ax_vmax, vmax_vals, vmax_errs, "Vmax", "Vmax (signal/min)")
-        _bar(ax_kcat, kcat_vals, kcat_errs, "kcat", "kcat (s⁻¹)")
-        _bar(ax_kcat_km, kcat_km_vals, kcat_km_errs, "kcat / Km", "kcat/Km (s⁻¹·M⁻¹)")
+        kcat_unit, kcat_km_unit = ("s⁻¹", "s⁻¹·M⁻¹") if self.calibrated else ("uncalibrated",) * 2
+        _bar(ax_vmax, vmax_vals, vmax_errs, "Vmax", f"Vmax ({self._velocity_unit})")
+        _bar(ax_kcat, kcat_vals, kcat_errs, "kcat", f"kcat ({kcat_unit})")
+        _bar(ax_kcat_km, kcat_km_vals, kcat_km_errs, "kcat / Km", f"kcat/Km ({kcat_km_unit})")
 
         fig.tight_layout()
         plot_path = self._make_builder().with_tag("efficiency")
