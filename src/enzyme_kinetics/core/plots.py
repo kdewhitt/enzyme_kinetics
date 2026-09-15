@@ -32,17 +32,15 @@ from typing import Any, Self
 import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
-from kgdlibs.pathtools import PathBuilder
-from logurich import DuoLogAdapter
+from loguru import logger
 
-from .calibration import Calibration
+from enzyme_kinetics.calibration import Calibration
+from enzyme_kinetics.forks import PathBuilder
 from .derive import KineticConstants
 from .models import lineweaver_burk_transform
 from .preprocess import extract_peak_data
 
 __all__ = ["KineticPlots"]
-
-_logger = DuoLogAdapter.create(component=__name__)
 
 # Display name overrides for known peak identifiers.
 _LABEL_MAP = {
@@ -138,7 +136,7 @@ class KineticPlots:
         """
         peaks = list(self.results)
         if not peaks:
-            _logger.warning("No fits to plot.")
+            logger.warning("No fits to plot.")
             return self
 
         rows = int(np.ceil(len(peaks) / cols))
@@ -151,56 +149,63 @@ class KineticPlots:
             kc = self.results[peak_id]
 
             if data is None:
-                ax.set_title(f"{peak_id} — no data")
-                ax.axis("off")
+                ax.set_visible(False)
                 continue
 
             s, v, v_std, _ = data
+            s_dense = np.linspace(0, s.max() * 1.05, 200)
+
+            # Apply calibration scaling to raw points if requested
             if self.calibrated and peak_id in self.calibrations:
                 cal = self.calibrations[peak_id]
                 mean_signal = v * self.reaction_time_seconds
                 v = np.asarray(cal.area_to_conc(mean_signal)) / self.reaction_time_seconds
                 v_std = v_std / cal.slope
+
+            # Raw data points with error bars
             ax.errorbar(
                 s,
                 v,
                 yerr=v_std,
                 fmt="o",
-                color="steelblue",
-                alpha=0.7,
+                color="black",
                 capsize=3,
-                label="Data",
+                label="Observed",
             )
 
-            s_fit = np.linspace(0, np.max(s) * 1.1, 200)
-            v_fit = kc.fit.predict(s_fit)
+            # Fitted model curve
+            v_model = kc.fit.predict(s_dense)
+            ax.plot(s_dense, v_model, color="firebrick", lw=1.5, label=f"Fit ({kc.fit.model})")
 
-            # FIX 7: use model-correct label for the affinity parameter
-            is_hill = kc.fit.model_type == "hill"
-            km_label = "k_half" if is_hill else "Km"
+            # Annotation box: Km, Vmax, R²
+            unit_v = "µM/s" if self.calibrated else "area/s"
+            ann_lines = [
+                f"Km = {kc.fit.km:.2f} ± {kc.fit.km_std:.2f} µM",
+                f"Vmax = {kc.fit.vmax:.4f} ± {kc.fit.vmax_std:.4f} {unit_v}",
+                f"R² = {kc.fit.r_squared:.4f}",
+            ]
+            if kc.fit.ki is not None:
+                ann_lines.append(f"Ki = {kc.fit.ki:.2f} µM")
+            if kc.fit.hill_n is not None:
+                ann_lines.append(f"n = {kc.fit.hill_n:.2f}")
 
-            if kc.fit.km > 1000:
-                label = (
-                    f"Vmax={kc.fit.vmax:.2g}±{kc.fit.vmax_std:.2g}\n"
-                    f"{km_label}={kc.fit.km:.2g}±{kc.fit.km_std:.2g}\n"
-                    f"R²={kc.fit.r_squared:.4g}"
-                )
-            else:
-                label = (
-                    f"Vmax={kc.fit.vmax:.2f}±{kc.fit.vmax_std:.2f}\n"
-                    f"{km_label}={kc.fit.km:.2f}±{kc.fit.km_std:.2f}\n"
-                    f"R²={kc.fit.r_squared:.4f}"
-                )
+            ax.text(
+                0.95,
+                0.05,
+                "\n".join(ann_lines),
+                transform=ax.transAxes,
+                fontsize=8,
+                verticalalignment="bottom",
+                horizontalalignment="right",
+                bbox={"boxstyle": "round,pad=0.3", "fc": "white", "alpha": 0.8},
+            )
 
-            ax.plot(s_fit, v_fit, "--", color="red", label=label)
-            ax.legend(fontsize=8, loc="lower right")
             ax.set_title(_LABEL_MAP.get(peak_id, peak_id), fontweight="bold")
             ax.set_xlabel(f"Substrate Concentration [{kc.substrate}] (µM)")
-            ax.set_ylabel(
-                # "Velocity (µM min⁻¹)",
-                "Velocity (µM min⁻¹)" if self.calibrated else "Velocity (area min⁻¹)",
-            )
+            ax.set_ylabel(f"Velocity ({unit_v})")
+            ax.legend(fontsize=8, loc="upper left")
 
+        # Hide unused subplots
         for j in range(len(peaks), len(axes)):
             axes[j].axis("off")
 
@@ -210,7 +215,7 @@ class KineticPlots:
         if show:
             plt.show()
         plt.close(fig)
-        _logger.info("Saved kinetics plot to %s", plot_path)
+        logger.info("Saved kinetics plot to {}", plot_path)
         return self
 
     # FIX 5 — restore publication plots: LB, residuals, efficiency comparison
@@ -233,7 +238,7 @@ class KineticPlots:
         """
         lb_peaks = [pid for pid, kc in self.results.items() if kc.lb_fit is not None]
         if not lb_peaks:
-            _logger.warning("No Lineweaver-Burk fits available to plot.")
+            logger.warning("No Lineweaver-Burk fits available to plot.")
             return self
 
         rows = int(np.ceil(len(lb_peaks) / cols))
@@ -309,7 +314,7 @@ class KineticPlots:
         if show:
             plt.show()
         plt.close(fig)
-        _logger.info("Saved Lineweaver-Burk plot to %s", plot_path)
+        logger.info("Saved Lineweaver-Burk plot to {}", plot_path)
         return self
 
     def plot_residuals(self, *, show: bool = False, cols: int = 2) -> Self:
@@ -331,7 +336,7 @@ class KineticPlots:
         """
         peaks = list(self.results)
         if not peaks:
-            _logger.warning("No fits to plot residuals for.")
+            logger.warning("No fits to plot residuals for.")
             return self
 
         rows = int(np.ceil(len(peaks) / cols))
@@ -379,7 +384,7 @@ class KineticPlots:
         if show:
             plt.show()
         plt.close(fig)
-        _logger.info("Saved residuals plot to %s", plot_path)
+        logger.info("Saved residuals plot to {}", plot_path)
         return self
 
     def plot_efficiency_comparison(
@@ -407,7 +412,7 @@ class KineticPlots:
             The KineticPlots instance, enabling method chaining.
         """
         if not self.results:
-            _logger.warning("No results available for efficiency comparison.")
+            logger.warning("No results available for efficiency comparison.")
             return self
 
         excluded = exclude or set()
@@ -471,5 +476,5 @@ class KineticPlots:
         if show:
             plt.show()
         plt.close(fig)
-        _logger.info("Saved efficiency comparison plot to %s", plot_path)
+        logger.info("Saved efficiency comparison plot to {}", plot_path)
         return self

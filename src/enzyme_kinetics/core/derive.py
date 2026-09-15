@@ -25,13 +25,10 @@ from dataclasses import dataclass
 from typing import Any
 
 import numpy as np
-from logurich import DuoLogAdapter
 
 from .models import FitResult
 
 __all__ = ["derive_constants", "KineticConstants"]
-
-_logger = DuoLogAdapter.create(component=__name__)
 
 # Unit conversion factor: µM → M.
 _UM_TO_M: float = 1e-6

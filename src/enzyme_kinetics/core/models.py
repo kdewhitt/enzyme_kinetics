@@ -25,11 +25,8 @@ from dataclasses import dataclass, field
 from typing import Any
 
 import numpy as np
-from logurich import DuoLogAdapter
 from scipy.optimize import curve_fit
 from scipy.stats import linregress
-
-_logger = DuoLogAdapter.create(component=__name__)
 
 __all__ = [
     "fit_hill",
