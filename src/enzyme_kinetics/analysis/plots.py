@@ -35,10 +35,10 @@ import pandas as pd
 from loguru import logger
 
 from enzyme_kinetics.calibration import Calibration
+from enzyme_kinetics.core.derive import KineticConstants
+from enzyme_kinetics.core.models import lineweaver_burk_transform
+from enzyme_kinetics.core.preprocess import extract_peak_data
 from enzyme_kinetics.forks import PathBuilder
-from .derive import KineticConstants
-from .models import lineweaver_burk_transform
-from .preprocess import extract_peak_data
 
 __all__ = ["KineticPlots"]
 

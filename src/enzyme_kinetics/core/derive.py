@@ -26,7 +26,7 @@ from typing import Any
 
 import numpy as np
 
-from .models import FitResult
+from enzyme_kinetics.core.models import FitResult
 
 __all__ = ["derive_constants", "KineticConstants"]
 
