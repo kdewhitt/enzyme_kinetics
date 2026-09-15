@@ -1,5 +1,7 @@
 """Run the enzyme_kinetics command-line interface."""
 
+from __future__ import annotations
+
 from enzyme_kinetics.cli.main import main
 
 if __name__ == "__main__":

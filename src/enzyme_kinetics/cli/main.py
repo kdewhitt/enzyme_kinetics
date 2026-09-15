@@ -127,11 +127,11 @@ def main() -> int:
 
     try:
         if isinstance(cmd, KineticArgs):
-            from enzyme_kinetics.cli.analyze import main as run_enzyme_kinetic_analysis_pipeline
+            from enzyme_kinetics.cli.analyze import run_enzyme_kinetic_analysis_pipeline
 
             run_enzyme_kinetic_analysis_pipeline(cmd)
         elif isinstance(cmd, CalibrationArgs):
-            from enzyme_kinetics.cli.calibration import main as run_calibration_pipeline
+            from enzyme_kinetics.cli.calibration import run_calibration_pipeline
 
             run_calibration_pipeline(cmd)
     except (OSError, ValueError, KeyError) as exc:
