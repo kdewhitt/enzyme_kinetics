@@ -28,18 +28,16 @@ from typing import Self
 
 import numpy as np
 import pandas as pd
-from kgdlibs.pathtools import PathBuilder
-from logurich import DuoLogAdapter
+from loguru import logger
 
-from .calibration import Calibration
+from enzyme_kinetics.calibration import Calibration
+from enzyme_kinetics.forks import PathBuilder
 from .derive import derive_constants, KineticConstants
 from .models import fit_hill, fit_lineweaver_burk, fit_michaelis_menten, FitResult
 from .plots import KineticPlots
 from .preprocess import extract_peak_data
 
 __all__ = ["analyze_peaks", "KineticAnalyzer"]
-
-_logger = DuoLogAdapter.create(component=__name__)
 
 
 def _select_and_fit(
@@ -172,7 +170,7 @@ class KineticAnalyzer:
                 try:
                     lb_fit = fit_lineweaver_burk(s, v)
                 except Exception:
-                    _logger.warning("LB fit failed for %s", peak_id)
+                    logger.warning("LB fit failed for {}", peak_id)
                 self.results[peak_id] = derive_constants(
                     self.substrate,
                     peak_id,
@@ -180,10 +178,10 @@ class KineticAnalyzer:
                     self.enzyme_conc_um,
                     lb_fit=lb_fit,
                 )
-                _logger.success(f"{peak_id}: Km={self.results[peak_id].fit.km}")
+                logger.success("{}: Km={}", peak_id, self.results[peak_id].fit.km)
 
             except Exception as exc:
-                _logger.warning("Fit failed for %s: %s", peak_id, exc)
+                logger.warning("Fit failed for {}: {}", peak_id, exc)
         return self
 
     def apply_calibration(
@@ -241,9 +239,9 @@ class KineticAnalyzer:
         """
         # Guard with calibration validity check
         if not cal.is_valid():
-            _logger.warning(
+            logger.warning(
                 "Calibration does not meet quality thresholds "
-                "(R²=%.4f, slope=%.4g). Results may be unreliable.",
+                "(R²={:.4f}, slope={:.4g}). Results may be unreliable.",
                 cal.r_squared,
                 cal.slope,
             )
@@ -311,7 +309,7 @@ class KineticAnalyzer:
                     lb_fit=kc.lb_fit,
                 )
             except Exception as exc:
-                _logger.warning("Calibrated re-fit failed for %s: %s", peak_id, exc)
+                logger.warning("Calibrated re-fit failed for {}: {}", peak_id, exc)
 
         if peak_ids is not None:
             self.results.update(recalculated)
@@ -380,7 +378,7 @@ class KineticAnalyzer:
         """
         stats_df = self.to_dataframe()
         if stats_df.empty:
-            _logger.warning("No kinetics data to export.")
+            logger.warning("No kinetics data to export.")
             return self
 
         out_path = (
@@ -393,7 +391,7 @@ class KineticAnalyzer:
             .path
         )
         stats_df.to_csv(out_path, index=False)
-        _logger.info("Exported %s rows to %s", len(stats_df), out_path)
+        logger.info("Exported {} rows to {}", len(stats_df), out_path)
         return self
 
 
@@ -453,7 +451,7 @@ def analyze_peaks(
         s = substrate_conc[peak_id]
         v = velocity[peak_id]
         if len(s) < min_points or np.all(v == 0):
-            _logger.info("Skipping %s: insufficient data", peak_id)
+            logger.info("Skipping {}: insufficient data", peak_id)
             continue
         sigma = velocity_std.get(peak_id)
         try:
@@ -470,6 +468,6 @@ def analyze_peaks(
                 lb_fit=lb_fit,
             )
         except Exception as exc:
-            _logger.warning("Fit failed for %s: %s", peak_id, exc)
+            logger.warning("Fit failed for {}: {}", peak_id, exc)
 
     return results

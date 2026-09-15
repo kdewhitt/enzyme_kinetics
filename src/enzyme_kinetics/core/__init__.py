@@ -1,1 +1,1 @@
-"""Core module for modeling and plotting enzyme-catalyzed reactions."""
+"""Per-peak kinetic model fitting, constant derivation, and plotting for HPLC data."""
